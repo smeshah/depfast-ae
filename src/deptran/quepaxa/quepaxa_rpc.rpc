@@ -1,0 +1,5 @@
+namespace janus;
+
+abstract service Epaxos {
+    defer SendToRecoder(uint64_t step, Proposal p | SlotState st);
+}
