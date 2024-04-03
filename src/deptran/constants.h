@@ -91,7 +91,7 @@ namespace janus {
 #define MODE_DEPTRAN (4)
 
 #define MODE_MULTI_PAXOS   (0x40)
-#define MODE_EPAXOS        (0x80)
+#define MODE_QUEPAXA        (0x80)
 #define MODE_TAPIR         (0x100)
 #define MODE_MENCIUS       (0x200)
 #define MODE_CAROUSEL (0x2000)

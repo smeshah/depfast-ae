@@ -20,7 +20,7 @@ do
 				do
 				name=copilot_"$role"_exp"$e"_t"$t"_c"$c"_s"$svr"_trail$i
 				echo "Running experiment $name"
-				./start-exp-epaxos.sh $name $c $time $e $svr $role $t
+				./start-exp-quepaxa.sh $name $c $time $e $svr $role $t
 			done
 		done
 	done

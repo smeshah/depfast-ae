@@ -4,41 +4,57 @@
 #include "../constants.h"
 #include "../classic/tpc_command.h"
 #include "commo.h"
-#include "graph.h"
 
-namespace Janus {
+namespace janus {
 
-    struct Proposal {
-        int priority;
-        int proposerId;
-        int value;
+#define NOOP_DKEY string("")
 
-        Proposal(int p = 0, int id = 0, int v = 0) : priority(p), proposerId(id), value(v) {}
 
-        bool operator<(const Proposal& other) const {
-            return priority == other.priority ? proposerId < other.proposerId : priority < other.priority;
-        }
-    };
+class QuePaxaServer : public TxLogServer {
+ private:
 
-    struct SlotState {
-        int currentStep = 0;
-        Proposal firstProposalInCurrentStep;
-        Proposal maxProposalInCurrentStep;
-        Proposal maxProposalInPreviousStep;
-    };
+ public:
 
-    class QuePaxaServer {
-    public:
-        explicit QuePaxaServer(int serverId) : serverId_(serverId) {}
+ private:
 
-        // Methods for managing proposals and slots
-        void propose(int step, const Proposal& proposal);
-        SlotState processProposal(int step, const Proposal& proposal);
+  /* Helpers */
 
-    private:
-        int serverId_;
-        std::unordered_map<int, SlotState> slotStates_;
 
-    };
+  /* RPC handlers */
 
-} 
+ public:
+
+
+  /* Client request handlers */
+
+  public:
+
+  /* Do not modify this class below here */
+
+ public:
+  QuePaxaServer(Frame *frame) ;
+  ~QuePaxaServer() ;
+  
+ private:
+  bool disconnected_ = false;
+  void Setup();
+
+ public:
+  void Disconnect(const bool disconnect = true);
+  void Reconnect() {
+    Disconnect(false);
+  }
+  bool IsDisconnected();
+
+  virtual bool HandleConflicts(Tx& dtxn,
+                               innid_t inn_id,
+                               vector<string>& conflicts) {
+    verify(0);
+  };
+
+  QuePaxaCommo* commo() {
+    return (QuePaxaCommo*)commo_;
+  }
+
+};
+} // namespace janus

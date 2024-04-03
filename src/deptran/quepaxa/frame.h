@@ -7,31 +7,42 @@
 #include "server.h"
 #include "coordinator.h"
 
-namespace Janus {
-    class QuePaxaFrame : public Frame {
-        QuePaxaCommo* commo_ = nullptr;
-        QuePaxaServer* server_ = nullptr;
+namespace janus {
 
-        QuePaxaFrame(int mode);
+class QuePaxaFrame : public Frame {
+ private:
+  #ifdef QUEPAXA_TEST_CORO
+  static std::mutex quepaxa_test_mutex_;
+  static uint16_t n_replicas_;
+  #endif
 
-        virtual ~QuePaxaFrame() {
-            delete commo_;
-            delete server_;
-        }
+ public:
+  #ifdef QUEPAXA_TEST_CORO
+  static QuePaxaFrame *replicas_[NSERVERS];
+  #endif
+  QuePaxaCommo *commo_ = nullptr;
+  QuePaxaServer *svr_ = nullptr;
 
-        Coordinator *CreateCoordinator(cooid_t coo_id,
-                                        Config *config,
-                                        int benchmark,
-                                        ClientControlServiceImpl *ccsi,
-                                        uint32_t id,
-                                        shared_ptr<TxnRegistry> txn_reg);
+  QuePaxaFrame(int mode);
+  virtual ~QuePaxaFrame();
 
-        TxLogServer *CreateScheduler() override;
+  Coordinator *CreateCoordinator(cooid_t coo_id,
+                                 Config *config,
+                                 int benchmark,
+                                 ClientControlServiceImpl *ccsi,
+                                 uint32_t id,
+                                 shared_ptr<TxnRegistry> txn_reg);
 
-        Communicator *CreateCommo(PollMgr *poll = nullptr) override;
-        vector<rrr::Service *> CreateRpcServices(uint32_t site_id,
-                                                TxLogServer *dtxn_sched,
-                                                rrr::PollMgr *poll_mgr,
-                                                ServerControlServiceImpl *scsi) override;
-    };
-}
+  TxLogServer *CreateScheduler() override;
+  
+  Communicator *CreateCommo(PollMgr *poll = nullptr) override;
+  
+  vector<rrr::Service *> CreateRpcServices(uint32_t site_id,
+                                           TxLogServer *dtxn_sched,
+                                           rrr::PollMgr *poll_mgr,
+                                           ServerControlServiceImpl *scsi) override;
+
+  void setupCoordinator(QuePaxaCoordinator *coord, Config *config);
+};
+
+} // namespace janus
