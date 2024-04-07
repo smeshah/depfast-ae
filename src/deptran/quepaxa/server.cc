@@ -20,7 +20,149 @@ QuePaxaServer::~QuePaxaServer() {}
 void QuePaxaServer::Setup() {
 }
 
+void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const Proposal &proposal, SlotState *slotState) {
+  slotState->currentStep = step;
+  slotState->Fc = proposal;
+  slotState->Ac = proposal;
+  slotState->Ap = proposal;
+}
+void QuePaxaServer::propose(uint64_t &value) {
+  uint64_t s = 4 * 1 + 0;
+  uint64_t H = 0;
+  Proposal p(H, proposerId, value);
+  vector<Proposal> proposals;
+  for (int i = 0; i < 5; i++){
+    proposals.push_back(p);
+  }
+  while (true){
+    vector<SlotState> replies;
+    for (int i = 0; i < 5; i++){
+      replies.push_back(SlotState());
+    }
+    for (int i = 0; i < 5; i++){
+      if (i == loc_id_){
+        continue;
+      }
+      if (s%4 == 0 && (s>4 || i!=leader_id_)){
+        proposals[i].priority = generateRandomPriority(); 
+      }
+      intervalSummaryRegister(s, proposals[i], &replies[i]);
+    }
+    bool allRepliesHaveSameStep = true;
+    for (int i = 0; i < 5; i++){
+      if ( i!=loc_id_ && replies[i].currentStep != s){
+        allRepliesHaveSameStep = false;
+        break;
+      }
+    }
+    if (allRepliesHaveSameStep == true){
+      if (s%4 == 0){
+        bool allRepliesHaveSamePriority = true;
+        for (int i = 0; i < 5; i++){
+          if (i!=loc_id_ && replies[i].Fc.priority != proposals[i].priority){
+            allRepliesHaveSamePriority = false;
+            break;
+          }
+        }
+        if (allRepliesHaveSamePriority == true){
+            Proposal chosenProposal = proposals[loc_id_];
+            uint64_t value = chosenProposal.value;
+            Log_info("Value chose is %d", value);
+            return;
+        }
+        else {
+            p = findBestOfFirstProposals(replies);
+        }
+      }
+      if (s%4 == 1){
+        continue;
+      }
+      if (s%4 == 2){
+        Proposal bestOfAggregateProposal = findBestOfAggregateProposals(replies);
+        if (p == bestOfAggregateProposal){
+            uint64_t value = p.value;
+            Log_info("Value chose is %d", value);
+            return; 
+        }
+      }
+      if (s%4 == 3){
+        p = findBestOfAggregateProposals(replies); 
+      }
+    }
+    else if (allRepliesHaveSameStep == false){
+      Proposal maxStepProposal = findMaxStepProposal(replies);
+      p = maxStepProposal;
+      s = findMaxStep(replies);
+    }
+  }
+}
 
+uint64_t QuePaxaServer::generateRandomPriority() {
+  return 1 + (rand() % 100);
+}
+
+Proposal QuePaxaServer::findBestOfFirstProposals(const vector<SlotState>& replies) {
+    int bestIndex = -1;
+    uint64_t highestPriority = 0;
+
+    for (int i = 0; i < replies.size(); ++i) {
+        if (i != loc_id_ && replies[i].Fc.priority > highestPriority) {
+            bestIndex = i;
+            highestPriority = replies[i].Fc.priority;
+        }
+    }
+
+    if (bestIndex != -1) {
+        return Proposal(replies[bestIndex].Fc.priority, proposerId, replies[bestIndex].Fc.value);
+    } else {
+        return Proposal();
+    }
+}
+
+
+Proposal QuePaxaServer::findBestOfAggregateProposals(const vector<SlotState>& replies) {
+    int bestIndex = -1;
+    uint64_t highestPriority = 0;
+
+    for (int i = 0; i < replies.size(); ++i) {
+        if (replies[i].Ac.priority > highestPriority) {
+            bestIndex = i; 
+            highestPriority = replies[i].Ac.priority;
+        }
+    }
+
+    if (bestIndex != -1) {
+        return replies[bestIndex].Ac;
+    } else {
+        return Proposal(0, 0, 0);
+    }
+}
+
+Proposal QuePaxaServer::findMaxStepProposal(const vector<SlotState>& replies) {
+    uint64_t maxStep = 0;
+    Proposal maxStepProposal;
+
+    for (const SlotState& reply : replies) {
+        if (reply.currentStep > maxStep) {
+            maxStep = reply.currentStep;
+            maxStepProposal = reply.Fc;
+        }
+    }
+
+    return maxStepProposal;
+}
+
+uint64_t QuePaxaServer::findMaxStep(const vector<SlotState>& replies) {
+    uint64_t maxStep = 0;
+
+    for (const SlotState& reply : replies) {
+        if (reply.currentStep > maxStep) {
+            maxStep = reply.currentStep;
+        }
+    }
+
+    return maxStep;
+}
 
 /* Do not modify any code below here */
 
