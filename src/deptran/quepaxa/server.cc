@@ -21,11 +21,25 @@ void QuePaxaServer::Setup() {
 }
 
 void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const Proposal &proposal, SlotState *slotState) {
-  slotState->currentStep = step;
-  slotState->Fc = proposal;
-  slotState->Ac = proposal;
-  slotState->Ap = proposal;
+    SlotState state = slotStates[curSlot];
+    if (state.currentStep == step){
+        state.Ac.value = max(state.Ac.value, proposal.value);
+    }
+    else if (state.currentStep < step){
+        if (step == state.currentStep + 1){
+            state.Ap = state.Ac;
+        }
+        else {
+            state.Ap = Proposal(0, 0, 0);
+        }
+        state.currentStep = step;
+        state.Fc.value = proposal.value;
+        state.Ac.value = proposal.value;
+    }
+    slotStates[curSlot] = state;
+    *slotState = state;
 }
+
 void QuePaxaServer::propose(uint64_t &value) {
   uint64_t s = 4 * 1 + 0;
   uint64_t H = 0;

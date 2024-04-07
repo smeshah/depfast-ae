@@ -30,13 +30,20 @@ struct SlotState {
 
 class QuePaxaServer : public TxLogServer {
  public:
-uint64_t generateRandomPriority();
+ 
+ unordered_map<uint64_t, SlotState> slotStates;
+ uint64_t curSlot = 0;
+ 
+ 
+ uint64_t generateRandomPriority();
  void propose(uint64_t &value);
  void intervalSummaryRegister(const uint64_t &step, const Proposal &proposal, SlotState *slotState);
  Proposal findBestOfFirstProposals(const vector<SlotState>& replies);
  Proposal findBestOfAggregateProposals(const vector<SlotState>& replies);
  Proposal findMaxStepProposal(const vector<SlotState>& replies);
  uint64_t findMaxStep(const vector<SlotState>& replies);
+
+
 private:
 uint64_t leader_id_ = 1; 
 uint64_t proposerId = loc_id_;
