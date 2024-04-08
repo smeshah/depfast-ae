@@ -20,8 +20,12 @@ class QuePaxaServiceImpl : public QuePaxaService {
  public:
   QuePaxaServer* svr_;
   QuePaxaServiceImpl(TxLogServer* sched);
-RpcHandler(HelloRpc, 2, const string&, req, string*, res) {
+  RpcHandler(HelloRpc, 2, const string&, req, string*, res) {
     *res = "error"; 
+  };
+
+  RpcHandler(SendToRecoderRpc, 3, const uint64_t&, step, const string&, proposalData, string*, slotStateData) {
+    *slotStateData = "error"; 
   };
 
 };

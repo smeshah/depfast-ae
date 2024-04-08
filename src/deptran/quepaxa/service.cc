@@ -17,5 +17,14 @@ QuePaxaServiceImpl::QuePaxaServiceImpl(TxLogServer *sched) : svr_((QuePaxaServer
   Log_info("receive an rpc: %s", req.c_str());
   *res = "world";
   defer->reply();
-  }                   
+  }    
+  void QuePaxaServiceImpl::HandleSendToRecoderRpc(const uint64_t& step,
+                                     const string& proposalData,
+                                     string* slotStateData,
+                                     rrr::DeferredReply* defer) {
+  Log_info("receive an rpc: %lu %s", step, proposalData.c_str());
+  svr_->intervalSummaryRegister(step, proposalData, slotStateData);
+  defer->reply();
+  }
+
 } // namespace janus;
