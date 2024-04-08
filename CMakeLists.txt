@@ -44,12 +44,12 @@ pkg_check_modules(PYTHON REQUIRED python3)
 #pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
 
 
-hunter_add_package(Boost COMPONENTS system filesystem coroutine context thread)
+hunter_add_package(Boost COMPONENTS system filesystem coroutine context thread serialization)
 hunter_add_package(GTest)
 #hunter_add_package(GSL)
 
 find_package(Boost CONFIG REQUIRED
-        system filesystem coroutine context thread)
+        system filesystem coroutine context thread serialization)
 find_package(GTest CONFIG REQUIRED)
 #find_package(GSL CONFIG REQUIRED)
 

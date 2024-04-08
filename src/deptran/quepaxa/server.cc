@@ -20,7 +20,15 @@ QuePaxaServer::~QuePaxaServer() {}
 void QuePaxaServer::Setup() {
 }
 
-void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const Proposal &proposal, SlotState *slotState) {
+void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const string &proposalData, string *slotStateData) {
+        
+
+    std::stringstream ss(proposalData);
+    Proposal proposal;
+    boost::archive::text_iarchive ia(ss);
+    ia >> proposal;
+    
+    
     SlotState state = slotStates[curSlot];
     if (state.currentStep == step){
         state.Ac.value = max(state.Ac.value, proposal.value);
@@ -37,7 +45,11 @@ void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const Proposal
         state.Ac.value = proposal.value;
     }
     slotStates[curSlot] = state;
-    *slotState = state;
+
+    std::stringstream ss2;
+    boost::archive::text_oarchive oa(ss2);
+    oa << state;
+    *slotStateData = ss2.str();
 }
 
 void QuePaxaServer::propose(uint64_t &value) {
@@ -60,7 +72,21 @@ void QuePaxaServer::propose(uint64_t &value) {
       if (s%4 == 0 && (s>4 || i!=leader_id_)){
         proposals[i].priority = generateRandomPriority(); 
       }
-      intervalSummaryRegister(s, proposals[i], &replies[i]);
+      std::stringstream ss;
+      boost::archive::text_oarchive oa(ss);
+      oa << proposals[i];
+      string proposalData = ss.str();
+
+      string slotStateData;
+
+
+      intervalSummaryRegister(s, proposalData, &slotStateData);
+      std::stringstream ss2(slotStateData);
+      SlotState state;
+      boost::archive::text_iarchive ia(ss2);
+      ia >> state;
+      replies[i] = state;
+
     }
     bool allRepliesHaveSameStep = true;
     for (int i = 0; i < 5; i++){
