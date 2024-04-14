@@ -660,8 +660,8 @@ bool CopilotServer::isExecuted(shared_ptr<CopilotData>& ins) {
 Traditional way to do command execution. Abort execution at unCOMMITed cmd
 
 adopted from:
-https://github.com/efficient/epaxos/blob/master/src/epaxos/epaxos-exec.go
-https://github.com/PlatformLab/epaxos/blob/master/src/epaxos/epaxos-exec.go
+https://github.com/efficient/quepaxa/blob/master/src/quepaxa/quepaxa-exec.go
+https://github.com/PlatformLab/quepaxa/blob/master/src/quepaxa/quepaxa-exec.go
 
 **************************************************************************/
 #ifndef WAIT_AT_UNCOMMIT

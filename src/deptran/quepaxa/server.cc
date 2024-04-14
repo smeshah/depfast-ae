@@ -1,24 +1,60 @@
 #include "server.h"
 #include "frame.h"
-#if defined(QUEPAXA_TEST_CORO)
-#include "../classic/tpc_command.h"
-#endif
 
 
 namespace janus {
 
 QuePaxaServer::QuePaxaServer(Frame * frame) {
   frame_ = frame;
+  /* Your code here for server initialization. Note that this function is 
+     called in a different OS thread. Be careful about thread safety if 
+     you want to initialize variables here. */
+  // TODO: REMOVE
 }
 
-QuePaxaServer::~QuePaxaServer() {}
+QuePaxaServer::~QuePaxaServer() {
+  /* Your code here for server teardown */
 
-/***********************************
-   Main event processing loop      *
-************************************/
+}
 
 void QuePaxaServer::Setup() {
+  /* Your code here for server setup. Due to the asynchronous nature of the 
+     framework, this function could be called after a RPC handler is triggered. 
+     Your code should be aware of that. This function is always called in the 
+     same OS thread as the RPC handlers. */
+
+  // Future Work: Give unique replica id on restarts (by storing old replica_id persistently and new_replica_id = old_replica_id + N)
+
+
+  // Process requests
+  Coroutine::CreateRun([this](){
+    
+    for (int i = 0; i < 5; i++){
+        string res;
+
+        auto event = commo()->SendString(0, /* partition id is always 0 for lab1 */
+                                        0, "hello", &res);
+        event->Wait(1000000); //timeout after 1000000us=1s
+        if (event->status_ == Event::TIMEOUT) {
+          Log_info("timeout happens sample");
+        } else {
+          Log_info("rpc response is: %s", res.c_str()); 
+        }
+    }
+  });
 }
+
+void QuePaxaServer::GetState(uint64_t *result) {
+  /* Your code here. This function can be called from another OS thread. */
+  Log_info("GetState method called");
+
+}
+
+void QuePaxaServer::Start(uint64_t value) {
+  /* Your code here. This function can be called from another OS thread. */
+  Log_info("Start method called with value %lu", value);
+}
+
 
 void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const string &proposalData, string *slotStateData) {
         

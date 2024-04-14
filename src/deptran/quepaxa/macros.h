@@ -1,5 +1,7 @@
 #pragma once
 
+typedef unordered_map<uint64_t, uint64_t> unordered_map_uint64_uint64_t;
+
 #define _PARAMS0(...)
 #define _PARAMS1(first, second, ...) second
 #define _PARAMS2(first, second, ...) second, _PARAMS1(__VA_ARGS__)
@@ -24,8 +26,8 @@
 
 #define _ARGPAIRS0(...)
 #define _ARGPAIRS1(first, second, ...) first second _ARGPAIRS0(__VA_ARGS__)
-#define _ARGPAIRS3(first, second, ...) first second, _ARGPAIRS2(__VA_ARGS__)
 #define _ARGPAIRS2(first, second, ...) first second, _ARGPAIRS1(__VA_ARGS__)
+#define _ARGPAIRS3(first, second, ...) first second, _ARGPAIRS2(__VA_ARGS__)
 #define _ARGPAIRS4(first, second, ...) first second, _ARGPAIRS3(__VA_ARGS__)
 #define _ARGPAIRS5(first, second, ...) first second, _ARGPAIRS4(__VA_ARGS__)
 #define _ARGPAIRS6(first, second, ...) first second, _ARGPAIRS5(__VA_ARGS__)

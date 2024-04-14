@@ -19,7 +19,9 @@ class QuePaxaLabTest {
   void Cleanup(void);
 
  private:
-  void wait(uint64_t microseconds);
+
+  int testBasicAgree(void);
+  // void wait(uint64_t microseconds);
 
 };
 

@@ -2,12 +2,13 @@
 
 #include "../__dep__.h"
 #include "../constants.h"
-#include "../classic/tpc_command.h"
+#include "../scheduler.h"
 #include "commo.h"
 #include <boost/serialization/map.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
+
 
 class Proposal {
 private:
@@ -59,12 +60,12 @@ public:
 };
 
 
-
 namespace janus {
+
 
 class QuePaxaServer : public TxLogServer {
  public:
- 
+  /* do not modify this class below here */
  unordered_map<uint64_t, SlotState> slotStates;
  uint64_t curSlot = 0;
  
@@ -77,17 +78,17 @@ class QuePaxaServer : public TxLogServer {
  Proposal findMaxStepProposal(const vector<SlotState>& replies);
  uint64_t findMaxStep(const vector<SlotState>& replies);
 
+ private:
+  uint64_t leader_id_ = 1; 
+  uint64_t proposerId = loc_id_;
 
-private:
-uint64_t leader_id_ = 1; 
-uint64_t proposerId = loc_id_;
- 
+
  public:
   QuePaxaServer(Frame *frame) ;
   ~QuePaxaServer() ;
-  
 
-
+  void Start(uint64_t value);
+  void GetState(uint64_t *result);
  private:
   bool disconnected_ = false;
   void Setup();
@@ -108,6 +109,5 @@ uint64_t proposerId = loc_id_;
   QuePaxaCommo* commo() {
     return (QuePaxaCommo*)commo_;
   }
-
 };
 } // namespace janus

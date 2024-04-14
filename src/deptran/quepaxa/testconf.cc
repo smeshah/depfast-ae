@@ -1,5 +1,6 @@
 #include "testconf.h"
 #include "marshallable.h"
+#include "../classic/tpc_command.h"
 
 namespace janus {
 
@@ -12,13 +13,13 @@ std::function<void(Marshallable &)> QuePaxaTestConfig::commit_callbacks[NSERVERS
 std::vector<int> QuePaxaTestConfig::committed_cmds[NSERVERS];
 uint64_t QuePaxaTestConfig::rpc_count_last[NSERVERS];
 
-QuePaxaTestConfig::QuePaxaTestConfig(QuePaxaFrame **replicas) {
-  verify(QuePaxaTestConfig::replicas == nullptr);
-  QuePaxaTestConfig::replicas = replicas;
+QuePaxaTestConfig::QuePaxaTestConfig(QuePaxaFrame **replicas_) {
+  verify(replicas == nullptr);
+  replicas = replicas_;
   for (int i = 0; i < NSERVERS; i++) {
-    QuePaxaTestConfig::replicas[i]->svr_->rep_frame_ = QuePaxaTestConfig::replicas[i]->svr_->frame_;
-    QuePaxaTestConfig::committed_cmds[i].push_back(-1);
-    QuePaxaTestConfig::rpc_count_last[i] = 0;
+    replicas[i]->svr_->rep_frame_ = replicas[i]->svr_->frame_;
+    committed_cmds[i].push_back(-1);
+    rpc_count_last[i] = 0;
     disconnected_[i] = false;
   }
   th_ = std::thread([this](){ netctlLoop(); });
@@ -26,36 +27,94 @@ QuePaxaTestConfig::QuePaxaTestConfig(QuePaxaFrame **replicas) {
 
 void QuePaxaTestConfig::SetLearnerAction(void) {
   for (int i = 0; i < NSERVERS; i++) {
-    QuePaxaTestConfig::commit_callbacks[i] = [i](Marshallable& cmd) {
+    commit_callbacks[i] = [i](Marshallable& cmd) {
       verify(cmd.kind_ == MarshallDeputy::CMD_TPC_COMMIT);
       auto& command = dynamic_cast<TpcCommitCommand&>(cmd);
       Log_debug("server %d committed value %d", i, command.tx_id_);
-      QuePaxaTestConfig::committed_cmds[i].push_back(command.tx_id_);
+      committed_cmds[i].push_back(command.tx_id_);
     };
-    QuePaxaTestConfig::replicas[i]->svr_->RegLearnerAction(QuePaxaTestConfig::commit_callbacks[i]);
+    replicas[i]->svr_->RegLearnerAction(commit_callbacks[i]);
   }
 }
 
-
-
-int QuePaxaTestConfig::NCommitted(uint64_t index) {
+int QuePaxaTestConfig::NCommitted(uint64_t tx_id) {
   int cmd, n = 0;
   for (int i = 0; i < NSERVERS; i++) {
-    if (QuePaxaTestConfig::committed_cmds[i].size() > index) {
-      auto curcmd = QuePaxaTestConfig::committed_cmds[i][index];
-      if (n == 0) {
-        cmd = curcmd;
-      } else {
-        if (curcmd != cmd) {
-          return -1;
-        }
-      }
+    auto cmd = std::find(committed_cmds[i].begin(), committed_cmds[i].end(), tx_id);
+    if (cmd != committed_cmds[i].end()) {
       n++;
     }
   }
   return n;
 }
 
+void QuePaxaTestConfig::Start(int svr, int value) {
+  // Construct an empty TpcCommitCommand containing cmd as its tx_id_
+  // auto cmdptr = std::make_shared<TpcCommitCommand>();
+  // auto vpd_p = std::make_shared<VecPieceData>();
+  // vpd_p->sp_vec_piece_data_ = std::make_shared<vector<shared_ptr<SimpleCommand>>>();
+  // cmdptr->tx_id_ = cmd;
+  // cmdptr->cmd_ = vpd_p;
+  // auto cmdptr_m = dynamic_pointer_cast<Marshallable>(cmdptr);
+  // call Start()
+  // Log_debug("Starting agreement on svr %d for cmd id %d", svr, cmdptr->tx_id_);
+  replicas[svr]->svr_->Start(value);
+}
+
+void QuePaxaTestConfig::GetState(int svr, uint64_t *result) {
+  replicas[svr]->svr_->GetState(result);
+}
+
+// int QuePaxaTestConfig::Wait(uint64_t index, int n, uint64_t term) {
+//   int nc = 0, i;
+//   auto to = 10000; // 10 milliseconds
+//   for (i = 0; i < 30; i++) {
+//     nc = NCommitted(index);
+//     if (nc < 0) {
+//       return -3; // values differ
+//     } else if (nc >= n) {
+//       break;
+//     }
+//     Reactor::CreateSpEvent<TimeoutEvent>(to)->Wait();
+//     if (to < 1000000) {
+//       to *= 2;
+//     }
+//     if (TermMovedOn(term)) {
+//       return -2; // term changed
+//     }
+//   }
+//   if (i == 30) {
+//     return -1; // timeout
+//   }
+//   for (int i = 0; i < NSERVERS; i++) {
+//     if (QuePaxaTestConfig::committed_cmds[i].size() > index) {
+//       return QuePaxaTestConfig::committed_cmds[i][index];
+//     }
+//   }
+//   verify(0);
+// }
+
+bool QuePaxaTestConfig::DoAgreement(int value) {
+  Log_debug("Doing 1 round of QuePaxa agreement");
+  auto start = chrono::steady_clock::now();
+  while ((chrono::steady_clock::now() - start) < chrono::seconds{10}) {
+    uint64_t replica_id, instance_no;
+    Coroutine::Sleep(20000);
+    // Call Start() to all servers until alive command leader is found
+    for (int i = 0; i < NSERVERS; i++) {
+      // skip disconnected servers
+      if (replicas[i]->svr_->IsDisconnected())
+        continue;
+      Start(i, value);
+      // Log_debug("starting cmd ldr=%d cmd=%d", replicas[i]->svr_->loc_id_, cmd); // TODO: Print instance and ballot
+      break;
+    }
+    if (true){
+      break;
+    }
+  }
+  return true;
+}
 
 void QuePaxaTestConfig::Disconnect(int svr) {
   verify(svr >= 0 && svr < NSERVERS);
@@ -129,12 +188,11 @@ void QuePaxaTestConfig::Shutdown(void) {
 }
 
 uint64_t QuePaxaTestConfig::RpcCount(int svr, bool reset) {
-  std::lock_guard<std::recursive_mutex> lk(
-    QuePaxaTestConfig::replicas[svr]->commo_->rpc_mtx_);
-  uint64_t count = QuePaxaTestConfig::replicas[svr]->commo_->rpc_count_;
-  uint64_t count_last = QuePaxaTestConfig::rpc_count_last[svr];
+  std::lock_guard<std::recursive_mutex> lk(replicas[svr]->commo_->rpc_mtx_);
+  uint64_t count = replicas[svr]->commo_->rpc_count_;
+  uint64_t count_last = rpc_count_last[svr];
   if (reset) {
-    QuePaxaTestConfig::rpc_count_last[svr] = count;
+    rpc_count_last[svr] = count;
   }
   verify(count >= count_last);
   return count - count_last;
@@ -143,11 +201,16 @@ uint64_t QuePaxaTestConfig::RpcCount(int svr, bool reset) {
 uint64_t QuePaxaTestConfig::RpcTotal(void) {
   uint64_t total = 0;
   for (int i = 0; i < NSERVERS; i++) {
-    total += QuePaxaTestConfig::replicas[i]->commo_->rpc_count_;
+    total += replicas[i]->commo_->rpc_count_;
   }
   return total;
 }
 
+bool QuePaxaTestConfig::ServerCommitted(int svr, uint64_t index, int cmd) {
+  if (committed_cmds[svr].size() <= index)
+    return false;
+  return committed_cmds[svr][index] == cmd;
+}
 
 void QuePaxaTestConfig::netctlLoop(void) {
   int i;
@@ -217,14 +280,14 @@ void QuePaxaTestConfig::netctlLoop(void) {
 
 bool QuePaxaTestConfig::isDisconnected(int svr) {
   std::lock_guard<std::recursive_mutex> lk(connection_m_);
-  return QuePaxaTestConfig::replicas[svr]->svr_->IsDisconnected();
+  return replicas[svr]->svr_->IsDisconnected();
 }
 
 void QuePaxaTestConfig::disconnect(int svr, bool ignore) {
   std::lock_guard<std::recursive_mutex> lk(connection_m_);
   if (!isDisconnected(svr)) {
     // simulate disconnected server
-    QuePaxaTestConfig::replicas[svr]->svr_->Disconnect();
+    replicas[svr]->svr_->Disconnect();
   } else if (!ignore) {
     verify(0);
   }
@@ -234,7 +297,7 @@ void QuePaxaTestConfig::reconnect(int svr, bool ignore) {
   std::lock_guard<std::recursive_mutex> lk(connection_m_);
   if (isDisconnected(svr)) {
     // simulate reconnected server
-    QuePaxaTestConfig::replicas[svr]->svr_->Reconnect();
+    replicas[svr]->svr_->Reconnect();
   } else if (!ignore) {
     verify(0);
   }
@@ -243,11 +306,11 @@ void QuePaxaTestConfig::reconnect(int svr, bool ignore) {
 void QuePaxaTestConfig::slow(int svr, uint32_t msec) {
   std::lock_guard<std::recursive_mutex> lk(connection_m_);
   verify(!isDisconnected(svr));
-  QuePaxaTestConfig::replicas[svr]->commo_->rpc_poll_->slow(msec * 1000);
+  replicas[svr]->commo_->rpc_poll_->slow(msec * 1000);
 }
 
-QuePaxaServer *QuePaxaTestConfig::GetServer(int svr) {
-  return QuePaxaTestConfig::replicas[svr]->svr_;
+bool QuePaxaTestConfig::IsDisconnected(int svr) {
+  return isDisconnected(svr);
 }
 
 #endif

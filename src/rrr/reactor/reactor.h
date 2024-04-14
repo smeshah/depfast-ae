@@ -134,6 +134,7 @@ public:
     void pause();
     void resume();
     void slow(uint32_t sleep_usec);
+
     // Frequent Job
     void add(std::shared_ptr<Job> sp_job);
     void remove(std::shared_ptr<Job> sp_job);

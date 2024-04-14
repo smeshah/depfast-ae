@@ -82,8 +82,7 @@ def configure(conf):
     _enable_simulate_wan(conf)
     _enable_db_checksum(conf)
     _enable_leaksan(conf)
-    _enable_quepaxa(conf)
-    
+    _enable_quepaxa_test(conf)
     conf.env.append_value("CXXFLAGS", "-Wno-reorder")
     conf.env.append_value("CXXFLAGS", "-Wno-comment")
     conf.env.append_value("CXXFLAGS", "-Wno-unused-function")
@@ -305,7 +304,7 @@ def _enable_ipc(conf):
         Logs.pprint("PINK", "Use IPC instead of network socket")
         conf.env.append_value("CXXFLAGS", "-DUSE_IPC")
 
-def _enable_quepaxa(conf):
+def _enable_quepaxa_test(conf):
     if Options.options.enable_quepaxa_test:
         Logs.pprint("PINK", "QuePaxa testing coroutine enabled")
         conf.env.append_value("CXXFLAGS", "-DQUEPAXA_TEST_CORO")

@@ -9,16 +9,13 @@ namespace janus {
 
 // 5 servers in test configuration
 #define NSERVERS 5
+#define FAST_PATH_QUORUM 4
+#define SLOW_PATH_QUORUM 3
 // slow network connections have latency up to 26 milliseconds
 #define MAXSLOW 27
 // servers have 1/10 chance of being disconnected to the network
 #define DOWNRATE_N 1
 #define DOWNRATE_D 10
-// Give a generous 5 seconds for elections
-#define ELECTIONTIMEOUT 5000000
-
-// elections are expected to take at most 3 RPCs per server
-#define ELECTIONRPCS (3 * NSERVERS)
 // expected # of RPCs taken to commit n agreements
 #define COMMITRPCS(n) ((n + 1) * NSERVERS)
 
@@ -62,13 +59,38 @@ class QuePaxaTestConfig {
   // logged to this test's data structures.
   void SetLearnerAction(void);
 
- 
   // Returns number of servers that think log entry at index is committed.
   // Checks if the committed value for index is the same across servers.
-  int NCommitted(uint64_t index);
+  int NCommitted(uint64_t tx_id);
+
+  // Calls Start() to specified server
+  void Start(int svr, int value);
+
+  // Get state of the command at an instance replica_id.instance_no in a specified server
+  void GetState(int svr, uint64_t *res);
+
+  // Waits for at least n servers to commit index
+  // If commit takes too long, gives up after a while.
+  // If term has moved on since the given start term, also gives up.
+  // Returns the committed value on success.
+  // -1 if it took too long for enough servers to commit
+  // -2 if term changed
+  // -3 if committed values for index differ
+  // int Wait(uint64_t index, int n, uint64_t term);
+
+  // Does one agreement.
+  // Submits a command with value cmd to the leader
+  // Waits at most 2 seconds until n servers commit the command.
+  // Makes sure the value of the commits is the same as what was given.
+  // If retry == true, Retries the agreement until at most 10 seconds pass.
+  // Returns true on success, false on error.
+  bool DoAgreement(int cmd);
 
   // Disconnects server from rest of servers
   void Disconnect(int svr);
+
+  // Checks if server was disconnected from rest of servers
+  bool IsDisconnected(int svr);
 
   // Reconnects disconnected server
   void Reconnect(int svr);
@@ -100,6 +122,9 @@ class QuePaxaTestConfig {
   // since server setup.
   uint64_t RpcTotal(void);
 
+  // Returns true if svr committed a log entry at index with value cmd
+  bool ServerCommitted(int svr, uint64_t index, int cmd);
+
  private:
   // vars & subroutine for unreliable network setting
   std::thread th_;
@@ -116,9 +141,8 @@ class QuePaxaTestConfig {
   void reconnect(int svr, bool ignore = false);
   void slow(int svr, uint32_t msec);
 
-
- public:
-  QuePaxaServer *GetServer(int svr);
+  // other internal helpers
+  int waitOneLeader(bool want_leader, int expected);
 
 };
 

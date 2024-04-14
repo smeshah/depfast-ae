@@ -2,5 +2,5 @@ namespace janus;
 
 abstract service QuePaxa {
     defer HelloRpc(string req | string res);  
-    defer SendToRecoderRpc(uint64_t step, string proposalData | string slotData);        
+    defer SendToRecoderRpc(uint64_t step, string proposalData | string slotData);    
 }

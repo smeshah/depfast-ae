@@ -1,15 +1,15 @@
 #pragma once
 
 #include "__dep__.h"
-#include "constants.h"
-#include "../rcc/graph.h"
-#include "../rcc/graph_marshaler.h"
-#include "../command.h"
-#include "deptran/procedure.h"
-#include "../command_marshaler.h"
 #include "quepaxa_rpc.h"
 #include "server.h"
 #include "macros.h"
+// #include "constants.h"
+// #include "../rcc/graph.h"
+// #include "../rcc/graph_marshaler.h"
+// #include "../command.h"
+// #include "../procedure.h"
+// #include "../command_marshaler.h"
 
 
 namespace janus {
@@ -27,7 +27,7 @@ class QuePaxaServiceImpl : public QuePaxaService {
   RpcHandler(SendToRecoderRpc, 3, const uint64_t&, step, const string&, proposalData, string*, slotStateData) {
     *slotStateData = "error"; 
   };
-
+  
 };
 
 } // namespace janus

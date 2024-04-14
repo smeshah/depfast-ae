@@ -193,12 +193,7 @@ void Reactor::Loop(bool infinite, bool check_timeout) {
       } else {
         verify(event.status_ == Event::TIMEOUT);
       }
-      #ifdef QUEPAXA_PERF_TEST_CORO
-      // Ignore events of coroutines that are completed: TEMPORARY FIX
-      if (!*(sp_coro->up_boost_coro_task_)) {
-        continue;
-      }
-      #endif
+
       ContinueCoro(sp_coro);
     }
 
@@ -326,7 +321,7 @@ void Reactor::ContinueCoro(std::shared_ptr<Coroutine> sp_coro) {
 
 	if (sp_coro->status_ == Coroutine::INIT) {
     sp_coro->Run();
-  } else if (sp_coro->status_ == Coroutine::PAUSED || sp_coro->status_ == Coroutine::RECYCLED) {
+  } else {
     // PAUSED or RECYCLED
     sp_coro->Continue();
   }

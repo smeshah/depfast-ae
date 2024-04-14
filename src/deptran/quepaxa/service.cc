@@ -26,5 +26,4 @@ QuePaxaServiceImpl::QuePaxaServiceImpl(TxLogServer *sched) : svr_((QuePaxaServer
   svr_->intervalSummaryRegister(step, proposalData, slotStateData);
   defer->reply();
   }
-
 } // namespace janus;

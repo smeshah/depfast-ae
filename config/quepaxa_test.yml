@@ -1,7 +1,7 @@
-# Mode: just quepaxa replication
+# Mode: just Raft replication
 
 mode:
-  cc: quepaxa # concurrency control
+  cc: none # concurrency control
   ab: quepaxa # atomic broadcast
   read_only: occ
   batch: false
@@ -9,11 +9,10 @@ mode:
   ongoing: 1 # per client
 
 # Sites: 1 server, 5 replicas
+
 site:
   server:
     - ["s101:8101", "s102:8102", "s103:8103", "s104:8104", "s105:8105"]
-  client: # each line is a partition
-    - ["c01"]
 
 process:
   s101: localhost
@@ -21,7 +20,6 @@ process:
   s103: localhost
   s104: localhost
   s105: localhost
-  c01: localhost
 
 host:
   localhost: 127.0.0.1
