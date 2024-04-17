@@ -50,4 +50,23 @@ QuePaxaCommo::SendToRecoder(parid_t par_id, siteid_t site_id, const uint64_t& st
   }
   return ev;
 }
+
+shared_ptr<IntEvent>
+QuePaxaCommo::SendCommit(parid_t par_id, siteid_t site_id, const uint64_t& slot, shared_ptr<Marshallable> cmd){
+  auto proxies = rpc_par_proxies_[par_id];
+  auto ev = Reactor::CreateSpEvent<IntEvent>();
+  for (auto& p : proxies) {
+    if (p.first == site_id) {
+      QuePaxaProxy *proxy = (QuePaxaProxy*) p.second;
+      FutureAttr fuattr;
+      fuattr.callback = [ev](Future* fu) {
+        ev->Set(1);
+      };
+      MarshallDeputy md(cmd);
+      /* wrap Marshallable in a MarshallDeputy to send over RPC */
+      Call_Async(proxy, SendCommitRpc, slot, md, fuattr);
+    }
+  }
+  return ev;
+}
 } // namespace janus

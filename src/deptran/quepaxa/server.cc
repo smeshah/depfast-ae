@@ -23,24 +23,43 @@ void QuePaxaServer::Setup() {
      Your code should be aware of that. This function is always called in the 
      same OS thread as the RPC handlers. */
 
-  // Future Work: Give unique replica id on restarts (by storing old replica_id persistently and new_replica_id = old_replica_id + N)
-
-
   // Process requests
-  Coroutine::CreateRun([this](){
+  // Coroutine::CreateRun([this](){
     
-    for (int i = 0; i < 5; i++){
-        string res;
+  //   for (int i = 0; i < 5; i++){
+  //       string res;
 
-        auto event = commo()->SendString(0, /* partition id is always 0 for lab1 */
-                                        0, "hello", &res);
-        event->Wait(1000000); //timeout after 1000000us=1s
-        if (event->status_ == Event::TIMEOUT) {
-          Log_info("timeout happens sample");
-        } else {
-          Log_info("rpc response is: %s", res.c_str()); 
-        }
+  //       auto event = commo()->SendString(0, /* partition id is always 0 for lab1 */
+  //                                       0, "hello", &res);
+  //       event->Wait(1000000); //timeout after 1000000us=1s
+  //       if (event->status_ == Event::TIMEOUT) {
+  //         Log_info("timeout happens sample");
+  //       } else {
+  //         Log_info("rpc response is: %s", res.c_str()); 
+  //       }
+  //   }
+  // });
+
+   Coroutine::CreateRun([this](){
+    while(true) {
+      mtx_.lock();
+      int size = reqs.size();
+      mtx_.unlock();
+      // Future Work: Can make more efficient by having a pub-sub kind of thing
+      if (size == 0) {
+        Coroutine::Sleep(1000);
+      } else {
+        mtx_.lock();
+        int req = reqs.front();
+        reqs.pop_front();
+        mtx_.unlock();
+        Log_info("Processing request %d", req);
+        Coroutine::CreateRun([this,&req](){
+          propose(req);
+        });
+      }
     }
+
   });
 }
 
@@ -50,11 +69,23 @@ void QuePaxaServer::GetState(uint64_t *result) {
 
 }
 
-void QuePaxaServer::Start(uint64_t value) {
+void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
   /* Your code here. This function can be called from another OS thread. */
-  Log_info("Start method called with value %lu", value);
+  // pending_values.push(value);
+  // Log_info("Start method called with value %lu", value);
+    std::lock_guard<std::recursive_mutex> lock(mtx_);
+    shared_ptr<TpcCommitCommand> tpcCmd=std::dynamic_pointer_cast<TpcCommitCommand>(cmd);
+    reqs.push_back((int)(tpcCmd->tx_id_));
+    *index = curSlot;
+    curSlot++;
 }
 
+
+void QuePaxaServer::handleCommit(const uint64_t &slot, shared_ptr<Marshallable> &cmd) {
+    std::lock_guard<std::recursive_mutex> lock(mtx_);
+    app_next_(*cmd);
+    // committedValues[slot] = cmd;
+}
 
 void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const string &proposalData, string *slotStateData) {
         
@@ -63,11 +94,13 @@ void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const string &
     Proposal proposal;
     boost::archive::text_iarchive ia(ss);
     ia >> proposal;
-    
-    
+    Log_info("Received proposal with value %d", proposal.value);
     SlotState state = slotStates[curSlot];
     if (state.currentStep == step){
-        state.Ac.value = max(state.Ac.value, proposal.value);
+        // state.Ac.value = max(state.Ac.value, proposal.value);
+        if (proposal.value> state.Ac.value){
+            state.Ac = proposal;
+        }
     }
     else if (state.currentStep < step){
         if (step == state.currentStep + 1){
@@ -77,10 +110,10 @@ void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const string &
             state.Ap = Proposal(0, 0, 0);
         }
         state.currentStep = step;
-        state.Fc.value = proposal.value;
-        state.Ac.value = proposal.value;
+        state.Fc = proposal;
+        state.Ac = proposal;
     }
-    slotStates[curSlot] = state;
+    // slotStates[curSlot] = state;
 
     std::stringstream ss2;
     boost::archive::text_oarchive oa(ss2);
@@ -88,7 +121,9 @@ void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const string &
     *slotStateData = ss2.str();
 }
 
-void QuePaxaServer::propose(uint64_t &value) {
+void QuePaxaServer::propose(const uint64_t &value) {
+  Log_info("Propose method called with value %lu", value);
+  slotStates[curSlot] = SlotState();
   uint64_t s = 4 * 1 + 0;
   uint64_t H = 0;
   Proposal p(H, proposerId, value);
@@ -115,8 +150,9 @@ void QuePaxaServer::propose(uint64_t &value) {
 
       string slotStateData;
 
+      auto event = commo()->SendToRecoder(0, i, s, proposalData, &slotStateData);
+      event->Wait(100000);
 
-      intervalSummaryRegister(s, proposalData, &slotStateData);
       std::stringstream ss2(slotStateData);
       SlotState state;
       boost::archive::text_iarchive ia(ss2);
@@ -144,6 +180,20 @@ void QuePaxaServer::propose(uint64_t &value) {
             Proposal chosenProposal = proposals[loc_id_];
             uint64_t value = chosenProposal.value;
             Log_info("Value chose is %d", value);
+            committedValues[curSlot] = value;
+            auto cmdptr = std::make_shared<TpcCommitCommand>();
+            auto vpd_p = std::make_shared<VecPieceData>();
+            vpd_p->sp_vec_piece_data_ = std::make_shared<vector<shared_ptr<SimpleCommand>>>();
+            cmdptr->tx_id_ = value;
+            cmdptr->cmd_ = vpd_p;
+            auto cmdptr_m = dynamic_pointer_cast<Marshallable>(cmdptr);
+            app_next_(*cmdptr_m);
+            for (int i = 0; i < 5; i++){
+              if (i!=loc_id_){
+
+                commo()->SendCommit(0, i, curSlot, cmdptr_m);
+              }
+            }
             return;
         }
         else {
@@ -158,6 +208,19 @@ void QuePaxaServer::propose(uint64_t &value) {
         if (p == bestOfAggregateProposal){
             uint64_t value = p.value;
             Log_info("Value chose is %d", value);
+            committedValues[curSlot] = value;
+            auto cmdptr = std::make_shared<TpcCommitCommand>();
+            auto vpd_p = std::make_shared<VecPieceData>();
+            vpd_p->sp_vec_piece_data_ = std::make_shared<vector<shared_ptr<SimpleCommand>>>();
+            cmdptr->tx_id_ = value;
+            cmdptr->cmd_ = vpd_p;
+            auto cmdptr_m = dynamic_pointer_cast<Marshallable>(cmdptr);
+            app_next_(*cmdptr_m);
+            for (int i = 0; i < 5; i++){
+              if (i!=loc_id_){
+                commo()->SendCommit(0, i, curSlot, cmdptr_m);
+              }
+            }
             return; 
         }
       }

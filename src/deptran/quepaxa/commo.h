@@ -19,6 +19,8 @@ class QuePaxaCommo : public Communicator {
   shared_ptr<IntEvent>
   SendToRecoder(parid_t par_id, siteid_t site_id, const uint64_t& step, const string& proposalData, string* slotStateData);
 
+  shared_ptr<IntEvent>
+  SendCommit(parid_t par_id, siteid_t site_id, const uint64_t& slot, shared_ptr<Marshallable> cmd);
                     
                      
   /* Do not modify this class below here */

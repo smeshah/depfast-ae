@@ -27,6 +27,8 @@ class QuePaxaServiceImpl : public QuePaxaService {
   RpcHandler(SendToRecoderRpc, 3, const uint64_t&, step, const string&, proposalData, string*, slotStateData) {
     *slotStateData = "error"; 
   };
+  RpcHandler(SendCommitRpc, 2, const uint64_t&, slot, const MarshallDeputy&, md_cmd) {
+  };
   
 };
 

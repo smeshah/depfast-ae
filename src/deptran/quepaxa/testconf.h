@@ -64,7 +64,7 @@ class QuePaxaTestConfig {
   int NCommitted(uint64_t tx_id);
 
   // Calls Start() to specified server
-  void Start(int svr, int value);
+  bool Start(int svr, int value, uint64_t *index);
 
   // Get state of the command at an instance replica_id.instance_no in a specified server
   void GetState(int svr, uint64_t *res);
@@ -84,7 +84,7 @@ class QuePaxaTestConfig {
   // Makes sure the value of the commits is the same as what was given.
   // If retry == true, Retries the agreement until at most 10 seconds pass.
   // Returns true on success, false on error.
-  bool DoAgreement(int cmd);
+  int DoAgreement(int cmd, int n);
 
   // Disconnects server from rest of servers
   void Disconnect(int svr);

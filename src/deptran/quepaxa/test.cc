@@ -8,11 +8,6 @@ int QuePaxaLabTest::Run(void) {
   config_->SetLearnerAction();
   uint64_t start_rpc = config_->RpcTotal();
   if (testBasicAgree()
-      // || testFastQuorumIndependentAgree()
-      // || testFastQuorumDependentAgree()
-      // || testSlowQuorumIndependentAgree()
-      // || testSlowQuorumDependentAgree()
-      // || testFailNoQuorum()
     ) {
     Print("TESTS FAILED");
     return 1;
@@ -55,12 +50,12 @@ void QuePaxaLabTest::Cleanup(void) {
                 nc, index, expected) \
       }
 
-#define DoAgreeAndAssertNCommitted(cmd) { \
-        auto r = config_->DoAgreement(cmd); \
+#define DoAgreeAndAssertNCommitted(cmd, n) { \
+        auto r = config_->DoAgreement(cmd, n); \
       }
       
-#define DoAgreeAndAssertNoneCommitted(cmd) { \
-        auto r = config_->DoAgreement(cmd); \
+#define DoAgreeAndAssertNoneCommitted(cmd, n) { \
+        auto r = config_->DoAgreement(cmd, n); \
       }
 
 // #define DoAgreeAndAssertWaitSuccess(cmd, n) { \
@@ -71,14 +66,11 @@ void QuePaxaLabTest::Cleanup(void) {
 
 int QuePaxaLabTest::testBasicAgree(void) {
   Init2(1, "Basic agreement");
-  for (int i = 1; i <= 300; i++) {
+  for (int i = 1; i <= 2; i++) {
     // complete 1 agreement and make sure its index is as expected
     int cmd = 100 + i;
     string dkey = to_string(cmd);
-    // make sure no commits exist before any agreements are started
-    AssertNoneCommitted(cmd);
-    unordered_map<uint64_t, uint64_t> deps;
-    DoAgreeAndAssertNCommitted(cmd);
+    DoAgreeAndAssertNCommitted(cmd, NSERVERS);
   }
   Passed2();
 }

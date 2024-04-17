@@ -4,6 +4,7 @@
 #include "../constants.h"
 #include "../scheduler.h"
 #include "commo.h"
+#include "../classic/tpc_command.h"
 #include <boost/serialization/map.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/archive/text_oarchive.hpp>
@@ -67,16 +68,18 @@ class QuePaxaServer : public TxLogServer {
  public:
   /* do not modify this class below here */
  unordered_map<uint64_t, SlotState> slotStates;
+ unordered_map<uint64_t, uint64_t> committedValues;
+ list<int> reqs;
  uint64_t curSlot = 0;
  
- 
  uint64_t generateRandomPriority();
- void propose(uint64_t &value);
+ void propose(const uint64_t &value);
  void intervalSummaryRegister(const uint64_t &step, const string &proposalData,  string *slotStateData);
  Proposal findBestOfFirstProposals(const vector<SlotState>& replies);
  Proposal findBestOfAggregateProposals(const vector<SlotState>& replies);
  Proposal findMaxStepProposal(const vector<SlotState>& replies);
  uint64_t findMaxStep(const vector<SlotState>& replies);
+ void handleCommit(const uint64_t &slot, shared_ptr<Marshallable> &cmd);
 
  private:
   uint64_t leader_id_ = 1; 
@@ -87,7 +90,7 @@ class QuePaxaServer : public TxLogServer {
   QuePaxaServer(Frame *frame) ;
   ~QuePaxaServer() ;
 
-  void Start(uint64_t value);
+  void Start(shared_ptr<Marshallable>& cmd, uint64_t *index);
   void GetState(uint64_t *result);
  private:
   bool disconnected_ = false;

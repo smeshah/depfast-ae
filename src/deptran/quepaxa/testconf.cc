@@ -48,72 +48,68 @@ int QuePaxaTestConfig::NCommitted(uint64_t tx_id) {
   return n;
 }
 
-void QuePaxaTestConfig::Start(int svr, int value) {
-  // Construct an empty TpcCommitCommand containing cmd as its tx_id_
-  // auto cmdptr = std::make_shared<TpcCommitCommand>();
-  // auto vpd_p = std::make_shared<VecPieceData>();
-  // vpd_p->sp_vec_piece_data_ = std::make_shared<vector<shared_ptr<SimpleCommand>>>();
-  // cmdptr->tx_id_ = cmd;
-  // cmdptr->cmd_ = vpd_p;
-  // auto cmdptr_m = dynamic_pointer_cast<Marshallable>(cmdptr);
+bool QuePaxaTestConfig::Start(int svr, int cmd, uint64_t *index) {
   // call Start()
-  // Log_debug("Starting agreement on svr %d for cmd id %d", svr, cmdptr->tx_id_);
-  replicas[svr]->svr_->Start(value);
+  auto cmdptr = std::make_shared<TpcCommitCommand>();
+  auto vpd_p = std::make_shared<VecPieceData>();
+  vpd_p->sp_vec_piece_data_ = std::make_shared<vector<shared_ptr<SimpleCommand>>>();
+  cmdptr->tx_id_ = cmd;
+  cmdptr->cmd_ = vpd_p;
+  auto cmdptr_m = dynamic_pointer_cast<Marshallable>(cmdptr);
+  // call Start()
+  Log_debug("Starting agreement on svr %d for cmd id %d", svr, cmdptr->tx_id_);
+
+  replicas[svr]->svr_->Start(cmdptr_m, index);
+
+  return true;
 }
 
 void QuePaxaTestConfig::GetState(int svr, uint64_t *result) {
   replicas[svr]->svr_->GetState(result);
 }
 
-// int QuePaxaTestConfig::Wait(uint64_t index, int n, uint64_t term) {
-//   int nc = 0, i;
-//   auto to = 10000; // 10 milliseconds
-//   for (i = 0; i < 30; i++) {
-//     nc = NCommitted(index);
-//     if (nc < 0) {
-//       return -3; // values differ
-//     } else if (nc >= n) {
-//       break;
-//     }
-//     Reactor::CreateSpEvent<TimeoutEvent>(to)->Wait();
-//     if (to < 1000000) {
-//       to *= 2;
-//     }
-//     if (TermMovedOn(term)) {
-//       return -2; // term changed
-//     }
-//   }
-//   if (i == 30) {
-//     return -1; // timeout
-//   }
-//   for (int i = 0; i < NSERVERS; i++) {
-//     if (QuePaxaTestConfig::committed_cmds[i].size() > index) {
-//       return QuePaxaTestConfig::committed_cmds[i][index];
-//     }
-//   }
-//   verify(0);
-// }
-
-bool QuePaxaTestConfig::DoAgreement(int value) {
+int QuePaxaTestConfig::DoAgreement(int cmd, int n) {
   Log_debug("Doing 1 round of QuePaxa agreement");
   auto start = chrono::steady_clock::now();
   while ((chrono::steady_clock::now() - start) < chrono::seconds{10}) {
-    uint64_t replica_id, instance_no;
     Coroutine::Sleep(20000);
-    // Call Start() to all servers until alive command leader is found
+    uint64_t index;
     for (int i = 0; i < NSERVERS; i++) {
-      // skip disconnected servers
-      if (replicas[i]->svr_->IsDisconnected())
+      if (QuePaxaTestConfig::replicas[i]->svr_->IsDisconnected())
         continue;
-      Start(i, value);
-      // Log_debug("starting cmd ldr=%d cmd=%d", replicas[i]->svr_->loc_id_, cmd); // TODO: Print instance and ballot
-      break;
+      if (Start(i, cmd, &index)) {
+        break;
+      }
     }
-    if (true){
-      break;
+ 
+      // If Start() successfully called, wait for agreement
+    auto start2 = chrono::steady_clock::now();
+    int nc;
+
+    while ((chrono::steady_clock::now() - start2) < chrono::seconds{10}) {
+      nc = NCommitted(index);
+      if (nc < 0) {
+        break;
+      } else if (nc >= n) {
+        for (int i = 0; i < NSERVERS; i++) {
+          if (QuePaxaTestConfig::committed_cmds[i].size() > index) {
+            Log_debug("found commit log");
+            auto cmd2 = QuePaxaTestConfig::committed_cmds[i][index];
+            if (cmd == cmd2) {
+              return index;
+            }
+            break;
+          }
+        }
+        break;
+      }
+      Coroutine::Sleep(20000);
+      // Coroutine::Sleep(50000);
     }
+    Log_debug("%d committed server at index %d", nc, index);
   }
-  return true;
+  Log_debug("Failed to reach agreement end");
+  return 0;
 }
 
 void QuePaxaTestConfig::Disconnect(int svr) {
