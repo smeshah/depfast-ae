@@ -37,11 +37,18 @@ void QuePaxaTestConfig::SetLearnerAction(void) {
   }
 }
 
-int QuePaxaTestConfig::NCommitted(uint64_t tx_id) {
+int QuePaxaTestConfig::NCommitted(uint64_t index) {
   int cmd, n = 0;
   for (int i = 0; i < NSERVERS; i++) {
-    auto cmd = std::find(committed_cmds[i].begin(), committed_cmds[i].end(), tx_id);
-    if (cmd != committed_cmds[i].end()) {
+    if (QuePaxaTestConfig::committed_cmds[i].size() > index) {
+      auto curcmd = QuePaxaTestConfig::committed_cmds[i][index];
+      if (n == 0) {
+        cmd = curcmd;
+      } else {
+        if (curcmd != cmd) {
+          return -1;
+        }
+      }
       n++;
     }
   }
@@ -68,45 +75,45 @@ void QuePaxaTestConfig::GetState(int svr, uint64_t *result) {
   replicas[svr]->svr_->GetState(result);
 }
 
-int QuePaxaTestConfig::DoAgreement(int cmd, int n) {
-  Log_debug("Doing 1 round of QuePaxa agreement");
+int QuePaxaTestConfig::DoAgreement(int cmd, int n, int leader) {
+  Log_debug("Doing 1 round of Raft agreement");
   auto start = chrono::steady_clock::now();
   while ((chrono::steady_clock::now() - start) < chrono::seconds{10}) {
-    Coroutine::Sleep(20000);
-    uint64_t index;
-    for (int i = 0; i < NSERVERS; i++) {
-      if (QuePaxaTestConfig::replicas[i]->svr_->IsDisconnected())
-        continue;
-      if (Start(i, cmd, &index)) {
-        break;
-      }
-    }
- 
+    Coroutine::Sleep(50000);
+    // Coroutine::Sleep(50000);
+    // Call Start() to all servers until leader is found
+    int ldr = 0;
+    uint64_t index, term;
+    Start(leader, cmd, &index);
+    if (ldr != -1) {
       // If Start() successfully called, wait for agreement
-    auto start2 = chrono::steady_clock::now();
-    int nc;
-
-    while ((chrono::steady_clock::now() - start2) < chrono::seconds{10}) {
-      nc = NCommitted(index);
-      if (nc < 0) {
-        break;
-      } else if (nc >= n) {
-        for (int i = 0; i < NSERVERS; i++) {
-          if (QuePaxaTestConfig::committed_cmds[i].size() > index) {
-            Log_debug("found commit log");
-            auto cmd2 = QuePaxaTestConfig::committed_cmds[i][index];
-            if (cmd == cmd2) {
-              return index;
+      auto start2 = chrono::steady_clock::now();
+      int nc;
+      while ((chrono::steady_clock::now() - start2) < chrono::seconds{10}) {
+        nc = NCommitted(index);
+        Log_info("Waiting for agreement on index %ld, %d servers committed", index, nc);
+        if (nc < 0) {
+          break;
+        } else if (nc >= n) {
+          for (int i = 0; i < NSERVERS; i++) {
+            if (QuePaxaTestConfig::committed_cmds[i].size() > index) {
+              Log_debug("found commit log");
+              auto cmd2 = QuePaxaTestConfig::committed_cmds[i][index];
+              if (cmd == cmd2) {
+                return index;
+              }
+              break;
             }
-            break;
           }
+          break;
         }
-        break;
+        Coroutine::Sleep(20000);
+        // Coroutine::Sleep(50000);
       }
-      Coroutine::Sleep(20000);
-      // Coroutine::Sleep(50000);
+      Log_debug("%d committed server at index %d", nc, index);
+   
+      Coroutine::Sleep(50000);
     }
-    Log_debug("%d committed server at index %d", nc, index);
   }
   Log_debug("Failed to reach agreement end");
   return 0;
@@ -272,6 +279,32 @@ void QuePaxaTestConfig::netctlLoop(void) {
     }
   }
   // cv_m_ unlocked state 3 (unreliable_ == false && finished_ == true)
+}
+
+int QuePaxaTestConfig::Wait(uint64_t index, int n) {
+  int nc = 0, i;
+  auto to = 10000; // 10 milliseconds
+  for (i = 0; i < 30; i++) {
+    nc = NCommitted(index);
+    if (nc < 0) {
+      return -3; // values differ
+    } else if (nc >= n) {
+      break;
+    }
+    Reactor::CreateSpEvent<TimeoutEvent>(to)->Wait();
+    if (to < 1000000) {
+      to *= 2;
+    }
+  }
+  if (i == 30) {
+    return -1; // timeout
+  }
+  for (int i = 0; i < NSERVERS; i++) {
+    if (QuePaxaTestConfig::committed_cmds[i].size() > index) {
+      return QuePaxaTestConfig::committed_cmds[i][index];
+    }
+  }
+  verify(0);
 }
 
 bool QuePaxaTestConfig::isDisconnected(int svr) {

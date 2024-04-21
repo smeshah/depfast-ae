@@ -76,7 +76,7 @@ class QuePaxaTestConfig {
   // -1 if it took too long for enough servers to commit
   // -2 if term changed
   // -3 if committed values for index differ
-  // int Wait(uint64_t index, int n, uint64_t term);
+  int Wait(uint64_t index, int n);
 
   // Does one agreement.
   // Submits a command with value cmd to the leader
@@ -84,7 +84,7 @@ class QuePaxaTestConfig {
   // Makes sure the value of the commits is the same as what was given.
   // If retry == true, Retries the agreement until at most 10 seconds pass.
   // Returns true on success, false on error.
-  int DoAgreement(int cmd, int n);
+  int DoAgreement(int cmd, int n, int leader);
 
   // Disconnects server from rest of servers
   void Disconnect(int svr);
@@ -142,7 +142,6 @@ class QuePaxaTestConfig {
   void slow(int svr, uint32_t msec);
 
   // other internal helpers
-  int waitOneLeader(bool want_leader, int expected);
 
 };
 

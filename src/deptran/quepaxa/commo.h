@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../__dep__.h"
+#include "../constants.h"
+
 #include "../communicator.h"
 
 
@@ -25,7 +27,6 @@ class QuePaxaCommo : public Communicator {
                      
   /* Do not modify this class below here */
 
-  friend class FpgaQuePaxaProxy;
  public:
   #ifdef QUEPAXA_TEST_CORO
   std::recursive_mutex rpc_mtx_ = {};

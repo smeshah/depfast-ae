@@ -22,7 +22,6 @@ QuePaxaServiceImpl::QuePaxaServiceImpl(TxLogServer *sched) : svr_((QuePaxaServer
                                      const string& proposalData,
                                      string* slotStateData,
                                      rrr::DeferredReply* defer) {
-  Log_info("receive an rpc: %lu %s", step, proposalData.c_str());
   svr_->intervalSummaryRegister(step, proposalData, slotStateData);
   defer->reply();
   }

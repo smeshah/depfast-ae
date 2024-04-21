@@ -22,6 +22,9 @@ class QuePaxaLabTest {
 
   int testBasicAgree(void);
   // void wait(uint64_t microseconds);
+  int testFailNoQuorum(void);
+  int testConcurrentStarts(void);
+  void wait(uint64_t microseconds);
 
 };
 

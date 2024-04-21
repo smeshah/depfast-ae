@@ -1,4 +1,4 @@
-# Mode: just Raft replication
+# Mode: just QuePaxa replication
 
 mode:
   cc: none # concurrency control

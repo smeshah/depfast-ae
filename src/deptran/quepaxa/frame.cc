@@ -33,6 +33,7 @@ TxLogServer *QuePaxaFrame::CreateScheduler() {
   #ifdef QUEPAXA_TEST_CORO
   quepaxa_test_mutex_.lock();
   verify(n_replicas_ < 5);
+  
   replicas_[this->site_info_->id] = this;
   n_replicas_++;
   quepaxa_test_mutex_.unlock();

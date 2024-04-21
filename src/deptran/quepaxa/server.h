@@ -70,7 +70,7 @@ class QuePaxaServer : public TxLogServer {
  unordered_map<uint64_t, SlotState> slotStates;
  unordered_map<uint64_t, uint64_t> committedValues;
  list<int> reqs;
- uint64_t curSlot = 0;
+ uint64_t curSlot = 1;
  
  uint64_t generateRandomPriority();
  void propose(const uint64_t &value);

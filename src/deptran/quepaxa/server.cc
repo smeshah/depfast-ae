@@ -76,6 +76,7 @@ void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
     std::lock_guard<std::recursive_mutex> lock(mtx_);
     shared_ptr<TpcCommitCommand> tpcCmd=std::dynamic_pointer_cast<TpcCommitCommand>(cmd);
     reqs.push_back((int)(tpcCmd->tx_id_));
+    Log_info("Start method called with value %lu on loc id %d", tpcCmd->tx_id_, loc_id_);
     *index = curSlot;
     curSlot++;
 }
@@ -83,18 +84,17 @@ void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
 
 void QuePaxaServer::handleCommit(const uint64_t &slot, shared_ptr<Marshallable> &cmd) {
     std::lock_guard<std::recursive_mutex> lock(mtx_);
+    curSlot++;
     app_next_(*cmd);
     // committedValues[slot] = cmd;
 }
 
 void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const string &proposalData, string *slotStateData) {
         
-
     std::stringstream ss(proposalData);
     Proposal proposal;
     boost::archive::text_iarchive ia(ss);
     ia >> proposal;
-    Log_info("Received proposal with value %d", proposal.value);
     SlotState state = slotStates[curSlot];
     if (state.currentStep == step){
         // state.Ac.value = max(state.Ac.value, proposal.value);
@@ -122,6 +122,7 @@ void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const string &
 }
 
 void QuePaxaServer::propose(const uint64_t &value) {
+
   Log_info("Propose method called with value %lu", value);
   slotStates[curSlot] = SlotState();
   uint64_t s = 4 * 1 + 0;
@@ -132,6 +133,7 @@ void QuePaxaServer::propose(const uint64_t &value) {
     proposals.push_back(p);
   }
   while (true){
+    Coroutine::Sleep(20000);
     vector<SlotState> replies;
     for (int i = 0; i < 5; i++){
       replies.push_back(SlotState());
@@ -148,17 +150,19 @@ void QuePaxaServer::propose(const uint64_t &value) {
       oa << proposals[i];
       string proposalData = ss.str();
 
-      string slotStateData;
+      string slotStateData = "";
 
       auto event = commo()->SendToRecoder(0, i, s, proposalData, &slotStateData);
       event->Wait(100000);
+      Log_info("Slot state from %d data is %s", i, slotStateData.c_str());
+      if (slotStateData != ""){
+        std::stringstream ss2(slotStateData);
+        SlotState state;
+        boost::archive::text_iarchive ia(ss2);
+        ia >> state;
+        replies[i] = state;
 
-      std::stringstream ss2(slotStateData);
-      SlotState state;
-      boost::archive::text_iarchive ia(ss2);
-      ia >> state;
-      replies[i] = state;
-
+      }
     }
     bool allRepliesHaveSameStep = true;
     for (int i = 0; i < 5; i++){
@@ -314,6 +318,7 @@ void QuePaxaServer::Disconnect(const bool disconnect) {
     _proxies[partition_id_] = {};
   }
   QuePaxaCommo *c = (QuePaxaCommo*) commo();
+  
   if (disconnect) {
     verify(_proxies[partition_id_][loc_id_].size() == 0);
     verify(c->rpc_par_proxies_.size() > 0);
