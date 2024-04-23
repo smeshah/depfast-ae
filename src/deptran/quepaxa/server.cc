@@ -95,10 +95,11 @@ void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const string &
     Proposal proposal;
     boost::archive::text_iarchive ia(ss);
     ia >> proposal;
+    
     SlotState state = slotStates[curSlot];
     if (state.currentStep == step){
         // state.Ac.value = max(state.Ac.value, proposal.value);
-        if (proposal.value> state.Ac.value){
+        if (proposal.priority > state.Ac.priority){
             state.Ac = proposal;
         }
     }
@@ -126,7 +127,7 @@ void QuePaxaServer::propose(const uint64_t &value) {
   Log_info("Propose method called with value %lu", value);
   slotStates[curSlot] = SlotState();
   uint64_t s = 4 * 1 + 0;
-  uint64_t H = 0;
+  uint64_t H = 100;
   Proposal p(H, proposerId, value);
   vector<Proposal> proposals;
   for (int i = 0; i < 5; i++){
@@ -138,13 +139,18 @@ void QuePaxaServer::propose(const uint64_t &value) {
     for (int i = 0; i < 5; i++){
       replies.push_back(SlotState());
     }
+    // Phase 0: If not leader, then propose with random priority
+    if (s%4 == 0 && (s>4 || loc_id_!=leader_id_)){
+       for (int i = 0; i < 5; i++){
+         proposals[i].priority = generateRandomPriority();
+       }
+    }
+    // Send record(step, proposal) to all recorders
     for (int i = 0; i < 5; i++){
       if (i == loc_id_){
         continue;
       }
-      if (s%4 == 0 && (s>4 || i!=leader_id_)){
-        proposals[i].priority = generateRandomPriority(); 
-      }
+
       std::stringstream ss;
       boost::archive::text_oarchive oa(ss);
       oa << proposals[i];
@@ -164,6 +170,8 @@ void QuePaxaServer::propose(const uint64_t &value) {
 
       }
     }
+    // Process replies (step, Fc, Ap)
+    // Check if all replies have the same step
     bool allRepliesHaveSameStep = true;
     for (int i = 0; i < 5; i++){
       if ( i!=loc_id_ && replies[i].currentStep != s){
@@ -172,6 +180,7 @@ void QuePaxaServer::propose(const uint64_t &value) {
       }
     }
     if (allRepliesHaveSameStep == true){
+      // Check if all replies have the same priority
       if (s%4 == 0){
         bool allRepliesHaveSamePriority = true;
         for (int i = 0; i < 5; i++){
@@ -180,45 +189,39 @@ void QuePaxaServer::propose(const uint64_t &value) {
             break;
           }
         }
+        // If all replies have the same priority, then choose the value with the highest priority
+        // Commit the value and return
         if (allRepliesHaveSamePriority == true){
             Proposal chosenProposal = proposals[loc_id_];
             uint64_t value = chosenProposal.value;
             Log_info("Value chose is %d", value);
             committedValues[curSlot] = value;
-            auto cmdptr = std::make_shared<TpcCommitCommand>();
-            auto vpd_p = std::make_shared<VecPieceData>();
-            vpd_p->sp_vec_piece_data_ = std::make_shared<vector<shared_ptr<SimpleCommand>>>();
-            cmdptr->tx_id_ = value;
-            cmdptr->cmd_ = vpd_p;
-            auto cmdptr_m = dynamic_pointer_cast<Marshallable>(cmdptr);
+            auto cmdptr_m = convertValueToCommand(value);
             app_next_(*cmdptr_m);
             for (int i = 0; i < 5; i++){
               if (i!=loc_id_){
-
                 commo()->SendCommit(0, i, curSlot, cmdptr_m);
               }
             }
             return;
         }
+        // If all replies do not have the same priority, then choose the value with the highest priority
         else {
-            p = findBestOfFirstProposals(replies);
+            p = findBestOfFirstSeenProposals(replies);
         }
       }
-      if (s%4 == 1){
-        continue;
-      }
+      // Phase 1, Spread E existent proposal (best proposal p) to all recorders
+      // if (s%4 == 1){
+      //   continue;
+      // }
+      // Phase 2, Gather E existent proposal from all recorders, spread C common proposal to all recorders
       if (s%4 == 2){
         Proposal bestOfAggregateProposal = findBestOfAggregateProposals(replies);
         if (p == bestOfAggregateProposal){
             uint64_t value = p.value;
             Log_info("Value chose is %d", value);
             committedValues[curSlot] = value;
-            auto cmdptr = std::make_shared<TpcCommitCommand>();
-            auto vpd_p = std::make_shared<VecPieceData>();
-            vpd_p->sp_vec_piece_data_ = std::make_shared<vector<shared_ptr<SimpleCommand>>>();
-            cmdptr->tx_id_ = value;
-            cmdptr->cmd_ = vpd_p;
-            auto cmdptr_m = dynamic_pointer_cast<Marshallable>(cmdptr);
+            auto cmdptr_m = convertValueToCommand(value);
             app_next_(*cmdptr_m);
             for (int i = 0; i < 5; i++){
               if (i!=loc_id_){
@@ -227,10 +230,13 @@ void QuePaxaServer::propose(const uint64_t &value) {
             }
             return; 
         }
+        // Spread C common proposal to all recorders ???
       }
+      // Phase 3, Gather C common proposal from all recorders
       if (s%4 == 3){
         p = findBestOfAggregateProposals(replies); 
       }
+      s += 1;
     }
     else if (allRepliesHaveSameStep == false){
       Proposal maxStepProposal = findMaxStepProposal(replies);
@@ -241,10 +247,10 @@ void QuePaxaServer::propose(const uint64_t &value) {
 }
 
 uint64_t QuePaxaServer::generateRandomPriority() {
-  return 1 + (rand() % 100);
+  return (rand() % 100);
 }
 
-Proposal QuePaxaServer::findBestOfFirstProposals(const vector<SlotState>& replies) {
+Proposal QuePaxaServer::findBestOfFirstSeenProposals(const vector<SlotState>& replies) {
     int bestIndex = -1;
     uint64_t highestPriority = 0;
 
@@ -305,6 +311,16 @@ uint64_t QuePaxaServer::findMaxStep(const vector<SlotState>& replies) {
     }
 
     return maxStep;
+}
+
+shared_ptr<Marshallable> QuePaxaServer::convertValueToCommand(uint64_t value) {
+    auto cmdptr = std::make_shared<TpcCommitCommand>();
+    auto vpd_p = std::make_shared<VecPieceData>();
+    vpd_p->sp_vec_piece_data_ = std::make_shared<vector<shared_ptr<SimpleCommand>>>();
+    cmdptr->tx_id_ = value;
+    cmdptr->cmd_ = vpd_p;
+    auto cmdptr_m = dynamic_pointer_cast<Marshallable>(cmdptr);
+    return cmdptr_m;
 }
 
 /* Do not modify any code below here */

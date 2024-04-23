@@ -178,6 +178,9 @@ int QuePaxaLabTest::testConcurrentStarts(void) {
   index_ += nconcurrent + 1;
   Passed2();
 }
+
+// Test case - request is submitted to two different proposers who are not leader for the same slot concurrently
+
 void QuePaxaLabTest::wait(uint64_t microseconds) {
   Reactor::CreateSpEvent<TimeoutEvent>(microseconds)->Wait();
 }

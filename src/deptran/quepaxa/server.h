@@ -75,11 +75,12 @@ class QuePaxaServer : public TxLogServer {
  uint64_t generateRandomPriority();
  void propose(const uint64_t &value);
  void intervalSummaryRegister(const uint64_t &step, const string &proposalData,  string *slotStateData);
- Proposal findBestOfFirstProposals(const vector<SlotState>& replies);
+ Proposal findBestOfFirstSeenProposals(const vector<SlotState>& replies);
  Proposal findBestOfAggregateProposals(const vector<SlotState>& replies);
  Proposal findMaxStepProposal(const vector<SlotState>& replies);
  uint64_t findMaxStep(const vector<SlotState>& replies);
  void handleCommit(const uint64_t &slot, shared_ptr<Marshallable> &cmd);
+ shared_ptr<Marshallable> convertValueToCommand(uint64_t value);
 
  private:
   uint64_t leader_id_ = 1; 
