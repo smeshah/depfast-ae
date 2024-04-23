@@ -79,6 +79,7 @@ void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
     *index = curSlot;
     curSlot++;
     Log_info("Current slot is %d", curSlot);
+    role = PROPOSER;
 }
 
 
@@ -92,6 +93,14 @@ void QuePaxaServer::handleCommit(const uint64_t &slot, shared_ptr<Marshallable> 
 
 void QuePaxaServer::intervalSummaryRegister(const uint64_t &index, const uint64_t &step, const string &proposalData, string *slotStateData) {
     Log_info("Interval summary register called with index %lu, step %lu, proposalData %s", index, step, proposalData.c_str());
+
+    if (role == PROPOSER){
+        return;
+    }
+    if (slotStates.find(index) == slotStates.end()){
+        slotStates[index] = SlotState();
+    }
+
     std::stringstream ss(proposalData);
     Proposal proposal;
     boost::archive::text_iarchive ia(ss);
@@ -134,6 +143,11 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
   }
   while (true){
     Coroutine::Sleep(20000);
+    // If slot already taken by another proposer return
+    if (committedValues.find(slot) != committedValues.end()){
+      role = RECORDER;
+      return;
+    }
     vector<SlotState> replies;
     for (int i = 0; i < 5; i++){
       replies.push_back(SlotState());
@@ -145,6 +159,7 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
        }
     }
     // Send record(step, proposal) to all recorders
+    uint64_t majority = 1;
     for (int i = 0; i < 5; i++){
       if (i == loc_id_){
         continue;
@@ -166,14 +181,17 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
         boost::archive::text_iarchive ia(ss2);
         ia >> state;
         replies[i] = state;
-
+        majority += 1;
       }
+    }
+    if (majority < 3){
+      continue;
     }
     // Process replies (step, Fc, Ap)
     // Check if all replies have the same step
     bool allRepliesHaveSameStep = true;
     for (int i = 0; i < 5; i++){
-      if ( i!=loc_id_ && replies[i].currentStep != s){
+      if (replies[i].currentStep!=0 && i!=loc_id_ && replies[i].currentStep != s){
         allRepliesHaveSameStep = false;
         break;
       }
@@ -181,9 +199,10 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
     if (allRepliesHaveSameStep == true){
       // Check if all replies have the same priority
       if (s%4 == 0){
+        Log_info("In Phase 0");
         bool allRepliesHaveSamePriority = true;
         for (int i = 0; i < 5; i++){
-          if (i!=loc_id_ && replies[i].Fc.priority != proposals[i].priority){
+          if (replies[i].currentStep!=0 && i!=loc_id_ && replies[i].Fc.priority != proposals[i].priority){
             allRepliesHaveSamePriority = false;
             break;
           }
@@ -195,6 +214,7 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
             uint64_t value = chosenProposal.value;
             Log_info("Value chosen is %d at index %d", value, slot);
             commitChosenValue(slot, value);
+            role = RECORDER;
             return;
         }
         // If all replies do not have the same priority, then choose the value with the highest priority
@@ -208,22 +228,26 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
       // }
       // Phase 2, Gather E existent proposal from all recorders, spread C common proposal to all recorders
       if (s%4 == 2){
+        Log_info("In Phase 2");
         Proposal bestOfAggregateProposal = findBestOfAggregateProposals(replies);
         if (p == bestOfAggregateProposal){
             uint64_t value = p.value;
             Log_info("Value chosen is %d at index %d", value, slot);
             commitChosenValue(slot, value);
+            role = RECORDER;
             return; 
         }
         // Spread C common proposal to all recorders ???
       }
       // Phase 3, Gather C common proposal from all recorders
       if (s%4 == 3){
+        Log_info("In Phase 3");
         p = findBestOfAggregateProposals(replies); 
       }
       s += 1;
     }
     else if (allRepliesHaveSameStep == false){
+      Log_info("All replies don't have same step");
       Proposal maxStepProposal = findMaxStepProposal(replies);
       p = maxStepProposal;
       s = findMaxStep(replies);

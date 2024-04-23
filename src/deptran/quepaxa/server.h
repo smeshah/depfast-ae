@@ -11,6 +11,11 @@
 #include <boost/archive/text_iarchive.hpp>
 
 
+enum ROLE {
+    PROPOSER,
+    RECORDER
+};
+
 class Proposal {
 private:
     friend class boost::serialization::access;
@@ -87,7 +92,7 @@ class QuePaxaServer : public TxLogServer {
  private:
   uint64_t leader_id_ = 1; 
   uint64_t proposerId = loc_id_;
-
+  ROLE role = RECORDER;
 
  public:
   QuePaxaServer(Frame *frame) ;

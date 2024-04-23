@@ -7,9 +7,11 @@ namespace janus {
 int QuePaxaLabTest::Run(void) {
   config_->SetLearnerAction();
   uint64_t start_rpc = config_->RpcTotal();
-  if (testBasicAgree() ||
+  if (
+      testBasicAgree() ||
       testFailNoQuorum() ||
-      testConcurrentStarts()
+      testConcurrentStarts() ||
+      testConcurrentStarts2()
     ) {
     Print("TESTS FAILED");
     return 1;
@@ -81,19 +83,18 @@ int QuePaxaLabTest::testBasicAgree(void) {
 
 int QuePaxaLabTest::testFailNoQuorum(void) {
   Init2(2, "No agreement if too many servers disconnect");
-  config_->Disconnect(0);
-  config_->Disconnect(1);
+  uint64_t proposer = 3;
+  config_->Disconnect((proposer+1)%5);
+  config_->Disconnect((proposer+2)%5);
+  config_->Disconnect((proposer+3)%5);
   for (int i = 1; i <= 3; i++) {
-    // complete 1 agreement and make sure its index is as expected
     int cmd = 200 + i;
-    // make sure no commits exist before any agreements are started
-    // AssertNoneCommitted(cmd);
-    uint64_t proposer = 2;
     DoAgreeAndAssertNoneCommitted(cmd, NSERVERS, proposer);
   }
   // Reconnect all
-  config_->Reconnect(0);
-  config_->Reconnect(1);
+  config_->Reconnect((proposer+1)%5);
+  config_->Reconnect((proposer+2)%5);
+  config_->Reconnect((proposer+3)%5);
   Coroutine::Sleep(500000);
   
   Passed2();
@@ -104,14 +105,15 @@ class CSArgs {
   std::mutex *mtx;
   int i;
   int proposer;
+  int startTxid;
   QuePaxaTestConfig *config;
 };
 
 static void *doConcurrentStarts(void *args) {
   CSArgs *csargs = (CSArgs *)args;
   uint64_t idx, tm;
-  auto ok = csargs->config->Start(csargs->proposer, 301 + csargs->i, &idx);
-  Log_info("Starting agreement %d on index %d", 301 + csargs->i, idx);
+  auto ok = csargs->config->Start(csargs->proposer, csargs->startTxid + csargs->i, &idx);
+  Log_info("Starting agreement %d on index %d", csargs->startTxid + csargs->i, idx);
   if (!ok) {
     return nullptr;
   }
@@ -148,6 +150,7 @@ int QuePaxaLabTest::testConcurrentStarts(void) {
       args->mtx = &mtx;
       args->i = i;
       args->proposer = proposer;
+      args->startTxid = 301;
       verify(pthread_create(&threads[i], nullptr, doConcurrentStarts, (void*)args) == 0);
     }
     // join all threads
@@ -169,6 +172,81 @@ int QuePaxaLabTest::testConcurrentStarts(void) {
       int j;
       for (j = 0; j < cmds.size(); j++) {
         if (cmds[j] == val) {
+          break;
+        }
+      }
+      Assert2(j < cmds.size(), "cmd %d missing", val);
+    }
+    success = true;
+    break;
+    skip: ;
+  }
+  Assert2(success, "failed - delayed responses");
+  index_ += nconcurrent + 1;
+  Passed2();
+}
+
+
+int QuePaxaLabTest::testConcurrentStarts2(void) {
+  Init2(4, "Concurrently started agreements - on different proposers");
+  int nconcurrent = 5;
+  bool success = false;
+  for (int again = 0; again < 5; again++) {
+    if (again > 0) {
+      wait(3000000);
+    }
+    uint64_t index;
+    uint64_t proposer = 4;
+
+    std::vector<uint64_t> indices{};
+    std::vector<int> cmds{};
+    std::mutex mtx{};
+    pthread_t threads[nconcurrent];
+
+    for (int i = 0; i < nconcurrent; i++) {
+      CSArgs *args = new CSArgs{};
+      args->indices = &indices;
+      args->mtx = &mtx;
+      args->i = i;
+      args->startTxid = 401;
+      args->proposer = proposer;
+      verify(pthread_create(&threads[i], nullptr, doConcurrentStarts, (void*)args) == 0);
+    }
+
+    for (int i = 0; i < nconcurrent; i++) {
+      CSArgs *args = new CSArgs{};
+      args->indices = &indices;
+      args->mtx = &mtx;
+      args->i = i;
+      args->startTxid = 501;
+      args->proposer = (proposer + 1)%5;
+      verify(pthread_create(&threads[i], nullptr, doConcurrentStarts, (void*)args) == 0);
+    }
+    // join all threads
+    for (int i = 0; i < nconcurrent; i++) {
+      verify(pthread_join(threads[i], nullptr) == 0);
+    }
+    // wait for all indices to commit
+    for (auto index : indices){
+      Log_info("Waiting for index %ld", index);
+    }
+    for (auto index : indices) {
+      int cmd = config_->Wait(index, NSERVERS);
+      if (cmd < 0) {
+        AssertWaitNoError(cmd, index);
+        goto skip; // on timeout and term changes, try again
+      }
+      cmds.push_back(cmd);
+    }
+    // make sure all the commits are there with the correct values
+
+    
+    for (int i = 0; i < nconcurrent; i++) {
+      auto val = 401 + i;
+      auto val2 = 501 + i;
+      int j;
+      for (j = 0; j < cmds.size(); j++) {
+        if (cmds[j] == val || cmds[j] == val2) {
           break;
         }
       }

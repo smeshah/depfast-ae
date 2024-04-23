@@ -24,6 +24,7 @@ class QuePaxaLabTest {
   // void wait(uint64_t microseconds);
   int testFailNoQuorum(void);
   int testConcurrentStarts(void);
+  int testConcurrentStarts2(void);
   void wait(uint64_t microseconds);
 
 };
