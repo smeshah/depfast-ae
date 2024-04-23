@@ -9,7 +9,7 @@ int QuePaxaLabTest::Run(void) {
   uint64_t start_rpc = config_->RpcTotal();
   if (testBasicAgree() ||
       testFailNoQuorum() ||
-    testConcurrentStarts()
+      testConcurrentStarts()
     ) {
     Print("TESTS FAILED");
     return 1;
@@ -53,12 +53,12 @@ void QuePaxaLabTest::Cleanup(void) {
                 nc, index, expected) \
       }
 
-#define DoAgreeAndAssertNCommitted(cmd, n, leader) { \
-        auto r = config_->DoAgreement(cmd, n, leader); \
+#define DoAgreeAndAssertNCommitted(cmd, n, proposer) { \
+        auto r = config_->DoAgreement(cmd, n, proposer); \
       }
       
-#define DoAgreeAndAssertNoneCommitted(cmd, n, leader) { \
-        auto r = config_->DoAgreement(cmd,n, leader); \
+#define DoAgreeAndAssertNoneCommitted(cmd, n, proposer) { \
+        auto r = config_->DoAgreement(cmd,n, proposer); \
         Assert2(r == 0, "committed command %d without majority", cmd); \
       }
 // #define DoAgreeAndAssertWaitSuccess(cmd, n) { \
@@ -73,30 +73,29 @@ int QuePaxaLabTest::testBasicAgree(void) {
     // complete 1 agreement and make sure its index is as expected
     int cmd = 100 + i;
     // AssertNoneCommitted(cmd);
-    uint64_t leader = 0;
-    DoAgreeAndAssertNCommitted(cmd, NSERVERS, leader);
+    uint64_t proposer = 0;
+    DoAgreeAndAssertNCommitted(cmd, NSERVERS, proposer);
   }
   Passed2();
 }
 
 int QuePaxaLabTest::testFailNoQuorum(void) {
   Init2(2, "No agreement if too many servers disconnect");
+  config_->Disconnect(0);
   config_->Disconnect(1);
-  config_->Disconnect(2);
   for (int i = 1; i <= 3; i++) {
     // complete 1 agreement and make sure its index is as expected
     int cmd = 200 + i;
     // make sure no commits exist before any agreements are started
     // AssertNoneCommitted(cmd);
-    Log_info("Asserting no commits for cmd %d", cmd);
-    uint64_t leader = 0;
-    DoAgreeAndAssertNoneCommitted(cmd, NSERVERS, leader);
-    Log_info("Done asserting no commits for cmd %d", cmd);
+    uint64_t proposer = 2;
+    DoAgreeAndAssertNoneCommitted(cmd, NSERVERS, proposer);
   }
   // Reconnect all
+  config_->Reconnect(0);
   config_->Reconnect(1);
-  config_->Reconnect(2);
-  Coroutine::Sleep(100000);
+  Coroutine::Sleep(500000);
+  
   Passed2();
 }
 class CSArgs {
@@ -104,13 +103,15 @@ class CSArgs {
   std::vector<uint64_t> *indices;
   std::mutex *mtx;
   int i;
+  int proposer;
   QuePaxaTestConfig *config;
 };
 
 static void *doConcurrentStarts(void *args) {
   CSArgs *csargs = (CSArgs *)args;
   uint64_t idx, tm;
-  auto ok = csargs->config->Start(0, 301 + csargs->i, &idx);
+  auto ok = csargs->config->Start(csargs->proposer, 301 + csargs->i, &idx);
+  Log_info("Starting agreement %d on index %d", 301 + csargs->i, idx);
   if (!ok) {
     return nullptr;
   }
@@ -129,7 +130,8 @@ int QuePaxaLabTest::testConcurrentStarts(void) {
     if (again > 0) {
       wait(3000000);
     }
-    uint64_t index, term;
+    uint64_t index;
+    uint64_t proposer = 4;
     // auto ok = config_->Start(0, 701, &index);
     // if (!ok) {
     //   continue; // retry (up to 5 times)
@@ -139,11 +141,13 @@ int QuePaxaLabTest::testConcurrentStarts(void) {
     std::vector<int> cmds{};
     std::mutex mtx{};
     pthread_t threads[nconcurrent];
+
     for (int i = 0; i < nconcurrent; i++) {
       CSArgs *args = new CSArgs{};
       args->indices = &indices;
       args->mtx = &mtx;
       args->i = i;
+      args->proposer = proposer;
       verify(pthread_create(&threads[i], nullptr, doConcurrentStarts, (void*)args) == 0);
     }
     // join all threads
@@ -174,7 +178,7 @@ int QuePaxaLabTest::testConcurrentStarts(void) {
     break;
     skip: ;
   }
-  Assert2(success, "too many term changes and/or delayed responses");
+  Assert2(success, "failed - delayed responses");
   index_ += nconcurrent + 1;
   Passed2();
 }

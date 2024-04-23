@@ -33,7 +33,7 @@ QuePaxaCommo::SendString(parid_t par_id, siteid_t site_id, const string& msg, st
   return ev;
 }
 shared_ptr<IntEvent>
-QuePaxaCommo::SendToRecoder(parid_t par_id, siteid_t site_id, const uint64_t& step, const string& proposalData, string* slotStateData){
+QuePaxaCommo::SendToRecoder(parid_t par_id, siteid_t site_id, const uint64_t& curSlot, const uint64_t& step, const string& proposalData, string* slotStateData){
   auto proxies = rpc_par_proxies_[par_id];
   auto ev = Reactor::CreateSpEvent<IntEvent>();
   for (auto& p : proxies) {
@@ -45,7 +45,7 @@ QuePaxaCommo::SendToRecoder(parid_t par_id, siteid_t site_id, const uint64_t& st
         ev->Set(1);
       };
       /* wrap Marshallable in a MarshallDeputy to send over RPC */
-      Call_Async(proxy, SendToRecoderRpc, step, proposalData, fuattr);
+      Call_Async(proxy, SendToRecoderRpc, curSlot, step, proposalData, fuattr);
     }
   }
   return ev;

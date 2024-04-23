@@ -69,18 +69,20 @@ class QuePaxaServer : public TxLogServer {
   /* do not modify this class below here */
  unordered_map<uint64_t, SlotState> slotStates;
  unordered_map<uint64_t, uint64_t> committedValues;
- list<int> reqs;
- uint64_t curSlot = 1;
+ std::list<std::pair<int, int>> reqs;
+ uint64_t curSlot = 0;
  
  uint64_t generateRandomPriority();
- void propose(const uint64_t &value);
- void intervalSummaryRegister(const uint64_t &step, const string &proposalData,  string *slotStateData);
+ void propose(const uint64_t &slot, const uint64_t &value);
+ void intervalSummaryRegister(const uint64_t& curSlot, const uint64_t &step, const string &proposalData,  string *slotStateData);
  Proposal findBestOfFirstSeenProposals(const vector<SlotState>& replies);
  Proposal findBestOfAggregateProposals(const vector<SlotState>& replies);
  Proposal findMaxStepProposal(const vector<SlotState>& replies);
  uint64_t findMaxStep(const vector<SlotState>& replies);
  void handleCommit(const uint64_t &slot, shared_ptr<Marshallable> &cmd);
  shared_ptr<Marshallable> convertValueToCommand(uint64_t value);
+ void commitChosenValue(uint64_t slot, uint64_t value);
+
 
  private:
   uint64_t leader_id_ = 1; 

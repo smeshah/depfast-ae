@@ -18,11 +18,12 @@ QuePaxaServiceImpl::QuePaxaServiceImpl(TxLogServer *sched) : svr_((QuePaxaServer
   *res = "world";
   defer->reply();
   }    
-  void QuePaxaServiceImpl::HandleSendToRecoderRpc(const uint64_t& step,
+  void QuePaxaServiceImpl::HandleSendToRecoderRpc(const uint64_t& curSlot,
+                                    const uint64_t& step,
                                      const string& proposalData,
                                      string* slotStateData,
                                      rrr::DeferredReply* defer) {
-  svr_->intervalSummaryRegister(step, proposalData, slotStateData);
+  svr_->intervalSummaryRegister(curSlot, step, proposalData, slotStateData);
   defer->reply();
   }
   void QuePaxaServiceImpl::HandleSendCommitRpc(const uint64_t& slot,

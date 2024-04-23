@@ -50,12 +50,12 @@ void QuePaxaServer::Setup() {
         Coroutine::Sleep(1000);
       } else {
         mtx_.lock();
-        int req = reqs.front();
+        std::pair<int, int> req = reqs.front();
         reqs.pop_front();
         mtx_.unlock();
-        Log_info("Processing request %d", req);
         Coroutine::CreateRun([this,&req](){
-          propose(req);
+          Log_info("Processing request %d at index %d at loc_id %d", req.second, req.first, loc_id_);
+          propose(req.first, req.second);
         });
       }
     }
@@ -63,9 +63,8 @@ void QuePaxaServer::Setup() {
   });
 }
 
-void QuePaxaServer::GetState(uint64_t *result) {
+void QuePaxaServer::GetState(uint64_t *nextSlot) {
   /* Your code here. This function can be called from another OS thread. */
-  Log_info("GetState method called");
 
 }
 
@@ -75,30 +74,31 @@ void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
   // Log_info("Start method called with value %lu", value);
     std::lock_guard<std::recursive_mutex> lock(mtx_);
     shared_ptr<TpcCommitCommand> tpcCmd=std::dynamic_pointer_cast<TpcCommitCommand>(cmd);
-    reqs.push_back((int)(tpcCmd->tx_id_));
+    reqs.push_back(std::make_pair(curSlot, (int)(tpcCmd->tx_id_)));
     Log_info("Start method called with value %lu on loc id %d", tpcCmd->tx_id_, loc_id_);
     *index = curSlot;
     curSlot++;
+    Log_info("Current slot is %d", curSlot);
 }
 
 
 void QuePaxaServer::handleCommit(const uint64_t &slot, shared_ptr<Marshallable> &cmd) {
     std::lock_guard<std::recursive_mutex> lock(mtx_);
+    committedValues[slot] = std::dynamic_pointer_cast<TpcCommitCommand>(cmd)->tx_id_;
+    Log_info("Value chosen is %d at index %d", committedValues[slot], slot);
     curSlot++;
     app_next_(*cmd);
-    // committedValues[slot] = cmd;
 }
 
-void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const string &proposalData, string *slotStateData) {
-        
+void QuePaxaServer::intervalSummaryRegister(const uint64_t &index, const uint64_t &step, const string &proposalData, string *slotStateData) {
+    Log_info("Interval summary register called with index %lu, step %lu, proposalData %s", index, step, proposalData.c_str());
     std::stringstream ss(proposalData);
     Proposal proposal;
     boost::archive::text_iarchive ia(ss);
     ia >> proposal;
     
-    SlotState state = slotStates[curSlot];
+    SlotState state = slotStates[index];
     if (state.currentStep == step){
-        // state.Ac.value = max(state.Ac.value, proposal.value);
         if (proposal.priority > state.Ac.priority){
             state.Ac = proposal;
         }
@@ -114,7 +114,7 @@ void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const string &
         state.Fc = proposal;
         state.Ac = proposal;
     }
-    // slotStates[curSlot] = state;
+    slotStates[index] = state;
 
     std::stringstream ss2;
     boost::archive::text_oarchive oa(ss2);
@@ -122,8 +122,7 @@ void QuePaxaServer::intervalSummaryRegister(const uint64_t &step, const string &
     *slotStateData = ss2.str();
 }
 
-void QuePaxaServer::propose(const uint64_t &value) {
-
+void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
   Log_info("Propose method called with value %lu", value);
   slotStates[curSlot] = SlotState();
   uint64_t s = 4 * 1 + 0;
@@ -142,7 +141,7 @@ void QuePaxaServer::propose(const uint64_t &value) {
     // Phase 0: If not leader, then propose with random priority
     if (s%4 == 0 && (s>4 || loc_id_!=leader_id_)){
        for (int i = 0; i < 5; i++){
-         proposals[i].priority = generateRandomPriority();
+         proposals[i].priority = generateRandomPriority() - 1;
        }
     }
     // Send record(step, proposal) to all recorders
@@ -158,7 +157,7 @@ void QuePaxaServer::propose(const uint64_t &value) {
 
       string slotStateData = "";
 
-      auto event = commo()->SendToRecoder(0, i, s, proposalData, &slotStateData);
+      auto event = commo()->SendToRecoder(0, i, slot, s, proposalData, &slotStateData);
       event->Wait(100000);
       Log_info("Slot state from %d data is %s", i, slotStateData.c_str());
       if (slotStateData != ""){
@@ -194,15 +193,8 @@ void QuePaxaServer::propose(const uint64_t &value) {
         if (allRepliesHaveSamePriority == true){
             Proposal chosenProposal = proposals[loc_id_];
             uint64_t value = chosenProposal.value;
-            Log_info("Value chose is %d", value);
-            committedValues[curSlot] = value;
-            auto cmdptr_m = convertValueToCommand(value);
-            app_next_(*cmdptr_m);
-            for (int i = 0; i < 5; i++){
-              if (i!=loc_id_){
-                commo()->SendCommit(0, i, curSlot, cmdptr_m);
-              }
-            }
+            Log_info("Value chosen is %d at index %d", value, slot);
+            commitChosenValue(slot, value);
             return;
         }
         // If all replies do not have the same priority, then choose the value with the highest priority
@@ -219,15 +211,8 @@ void QuePaxaServer::propose(const uint64_t &value) {
         Proposal bestOfAggregateProposal = findBestOfAggregateProposals(replies);
         if (p == bestOfAggregateProposal){
             uint64_t value = p.value;
-            Log_info("Value chose is %d", value);
-            committedValues[curSlot] = value;
-            auto cmdptr_m = convertValueToCommand(value);
-            app_next_(*cmdptr_m);
-            for (int i = 0; i < 5; i++){
-              if (i!=loc_id_){
-                commo()->SendCommit(0, i, curSlot, cmdptr_m);
-              }
-            }
+            Log_info("Value chosen is %d at index %d", value, slot);
+            commitChosenValue(slot, value);
             return; 
         }
         // Spread C common proposal to all recorders ???
@@ -321,6 +306,17 @@ shared_ptr<Marshallable> QuePaxaServer::convertValueToCommand(uint64_t value) {
     cmdptr->cmd_ = vpd_p;
     auto cmdptr_m = dynamic_pointer_cast<Marshallable>(cmdptr);
     return cmdptr_m;
+}
+
+void QuePaxaServer::commitChosenValue(uint64_t slot, uint64_t value){
+  committedValues[slot] = value;
+  auto cmdptr_m = convertValueToCommand(value);
+  app_next_(*cmdptr_m);
+  for (int i = 0; i < 5; i++){
+    if (i!=loc_id_){
+      commo()->SendCommit(0, i, slot, cmdptr_m);
+    }
+  }
 }
 
 /* Do not modify any code below here */

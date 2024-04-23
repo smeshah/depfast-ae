@@ -84,7 +84,7 @@ class QuePaxaTestConfig {
   // Makes sure the value of the commits is the same as what was given.
   // If retry == true, Retries the agreement until at most 10 seconds pass.
   // Returns true on success, false on error.
-  int DoAgreement(int cmd, int n, int leader);
+  int DoAgreement(int cmd, int n, int proposer);
 
   // Disconnects server from rest of servers
   void Disconnect(int svr);

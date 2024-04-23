@@ -18,7 +18,7 @@ QuePaxaTestConfig::QuePaxaTestConfig(QuePaxaFrame **replicas_) {
   replicas = replicas_;
   for (int i = 0; i < NSERVERS; i++) {
     replicas[i]->svr_->rep_frame_ = replicas[i]->svr_->frame_;
-    committed_cmds[i].push_back(-1);
+    // committed_cmds[i].push_back(-1);
     rpc_count_last[i] = 0;
     disconnected_[i] = false;
   }
@@ -75,23 +75,21 @@ void QuePaxaTestConfig::GetState(int svr, uint64_t *result) {
   replicas[svr]->svr_->GetState(result);
 }
 
-int QuePaxaTestConfig::DoAgreement(int cmd, int n, int leader) {
-  Log_debug("Doing 1 round of Raft agreement");
+int QuePaxaTestConfig::DoAgreement(int cmd, int n, int proposer) {
+  Log_debug("Doing 1 round of QuePaxa agreement");
   auto start = chrono::steady_clock::now();
   while ((chrono::steady_clock::now() - start) < chrono::seconds{10}) {
     Coroutine::Sleep(50000);
-    // Coroutine::Sleep(50000);
     // Call Start() to all servers until leader is found
     int ldr = 0;
-    uint64_t index, term;
-    Start(leader, cmd, &index);
+    uint64_t index;
+    Start(proposer, cmd, &index);
     if (ldr != -1) {
       // If Start() successfully called, wait for agreement
       auto start2 = chrono::steady_clock::now();
       int nc;
       while ((chrono::steady_clock::now() - start2) < chrono::seconds{10}) {
         nc = NCommitted(index);
-        Log_info("Waiting for agreement on index %ld, %d servers committed", index, nc);
         if (nc < 0) {
           break;
         } else if (nc >= n) {
@@ -108,7 +106,6 @@ int QuePaxaTestConfig::DoAgreement(int cmd, int n, int leader) {
           break;
         }
         Coroutine::Sleep(20000);
-        // Coroutine::Sleep(50000);
       }
       Log_debug("%d committed server at index %d", nc, index);
    
