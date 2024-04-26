@@ -10,7 +10,7 @@ int _test_id_g = 0;
 
 QuePaxaFrame **QuePaxaTestConfig::replicas = nullptr;
 std::function<void(Marshallable &)> QuePaxaTestConfig::commit_callbacks[NSERVERS];
-std::vector<int> QuePaxaTestConfig::committed_cmds[NSERVERS];
+std::unordered_map<int, int> QuePaxaTestConfig::committed_cmds[NSERVERS];
 uint64_t QuePaxaTestConfig::rpc_count_last[NSERVERS];
 
 QuePaxaTestConfig::QuePaxaTestConfig(QuePaxaFrame **replicas_) {
@@ -28,10 +28,10 @@ QuePaxaTestConfig::QuePaxaTestConfig(QuePaxaFrame **replicas_) {
 void QuePaxaTestConfig::SetLearnerAction(void) {
   for (int i = 0; i < NSERVERS; i++) {
     commit_callbacks[i] = [i](Marshallable& cmd) {
-      verify(cmd.kind_ == MarshallDeputy::CMD_TPC_COMMIT);
-      auto& command = dynamic_cast<TpcCommitCommand&>(cmd);
-      Log_debug("server %d committed value %d", i, command.tx_id_);
-      committed_cmds[i].push_back(command.tx_id_);
+      verify(cmd.kind_ == MarshallDeputy::CMD_QUEPAXA_COMMIT);
+      QuePaxaCommitMarshallable* command = dynamic_cast<QuePaxaCommitMarshallable*>(&cmd);
+      Log_debug("server %d committed value %d", i, command->value);
+      committed_cmds[i][command->slot] = command->value;
     };
     replicas[i]->svr_->RegLearnerAction(commit_callbacks[i]);
   }
@@ -72,23 +72,22 @@ bool QuePaxaTestConfig::Start(int svr, int cmd, uint64_t *index) {
 }
 
 void QuePaxaTestConfig::GetState(int svr, uint64_t *result) {
-  replicas[svr]->svr_->GetState(result);
+  // replicas[svr]->svr_->GetState(result);
 }
 
 int QuePaxaTestConfig::DoAgreement(int cmd, int n, int proposer) {
   Log_debug("Doing 1 round of QuePaxa agreement");
   auto start = chrono::steady_clock::now();
-  while ((chrono::steady_clock::now() - start) < chrono::seconds{10}) {
+  while ((chrono::steady_clock::now() - start) < chrono::seconds{5}) {
     Coroutine::Sleep(50000);
     // Call Start() to all servers until leader is found
-    int ldr = 0;
     uint64_t index;
     Start(proposer, cmd, &index);
-    if (ldr != -1) {
+    if (proposer != -1) {
       // If Start() successfully called, wait for agreement
       auto start2 = chrono::steady_clock::now();
       int nc;
-      while ((chrono::steady_clock::now() - start2) < chrono::seconds{10}) {
+      while ((chrono::steady_clock::now() - start2) < chrono::seconds{5}) {
         nc = NCommitted(index);
         if (nc < 0) {
           break;

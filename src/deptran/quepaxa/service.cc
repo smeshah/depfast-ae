@@ -26,12 +26,11 @@ QuePaxaServiceImpl::QuePaxaServiceImpl(TxLogServer *sched) : svr_((QuePaxaServer
   svr_->intervalSummaryRegister(curSlot, step, proposalData, slotStateData);
   defer->reply();
   }
-  void QuePaxaServiceImpl::HandleSendCommitRpc(const uint64_t& slot,
-                                      const MarshallDeputy& md_cmd,
+  void QuePaxaServiceImpl::HandleSendCommitRpc(const MarshallDeputy& md_cmd,
                                      rrr::DeferredReply* defer) {
 
   std::shared_ptr<Marshallable> value = const_cast<MarshallDeputy&>(md_cmd).sp_data_;
-  svr_->handleCommit(slot, value);
+  svr_->handleCommit(value);
   defer->reply();
   }
 

@@ -4,6 +4,14 @@
 
 namespace janus {
 
+
+static int volatile x1 =
+MarshallDeputy::RegInitializer(MarshallDeputy::CMD_QUEPAXA_COMMIT,
+                                     [] () -> Marshallable* {
+                                       return new QuePaxaCommitMarshallable;
+                                     });
+
+
 QuePaxaServer::QuePaxaServer(Frame * frame) {
   frame_ = frame;
   /* Your code here for server initialization. Note that this function is 
@@ -63,9 +71,10 @@ void QuePaxaServer::Setup() {
   });
 }
 
-void QuePaxaServer::GetState(uint64_t *nextSlot) {
+void QuePaxaServer::GetState(uint64_t slot, uint64_t *value) {
   /* Your code here. This function can be called from another OS thread. */
-
+  std::lock_guard<std::recursive_mutex> lock(mtx_);
+  *value = committedValues[slot];
 }
 
 void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
@@ -83,17 +92,25 @@ void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
 }
 
 
-void QuePaxaServer::handleCommit(const uint64_t &slot, shared_ptr<Marshallable> &cmd) {
-    std::lock_guard<std::recursive_mutex> lock(mtx_);
-    committedValues[slot] = std::dynamic_pointer_cast<TpcCommitCommand>(cmd)->tx_id_;
-    Log_info("Value chosen is %d at index %d", committedValues[slot], slot);
-    curSlot++;
-    app_next_(*cmd);
+void QuePaxaServer::handleCommit(shared_ptr<Marshallable> &cmd) {
+  std::lock_guard<std::recursive_mutex> lock(mtx_);
+  auto state = dynamic_pointer_cast<QuePaxaCommitMarshallable>(cmd);
+  Log_info("handleCommit method called with value %lu", state->value);
+  // if (committedValues.find(state->slot) != committedValues.end()){
+  //   return;
+  // }
+  committedValues[state->slot] = state->value;
+  curSlot = max(curSlot, state->slot + 1);
+  Log_info("Current slot at %d is %d", loc_id_, curSlot);
+  app_next_(*cmd);
 }
 
 void QuePaxaServer::intervalSummaryRegister(const uint64_t &index, const uint64_t &step, const string &proposalData, string *slotStateData) {
     Log_info("Interval summary register called with index %lu, step %lu, proposalData %s", index, step, proposalData.c_str());
 
+    if (committedValues.find(index) != committedValues.end()){
+        return;
+    }
     if (role == PROPOSER){
         return;
     }
@@ -142,7 +159,7 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
     proposals.push_back(p);
   }
   while (true){
-    Coroutine::Sleep(20000);
+    Coroutine::Sleep(10000);
     // If slot already taken by another proposer return
     if (committedValues.find(slot) != committedValues.end()){
       role = RECORDER;
@@ -152,12 +169,16 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
     for (int i = 0; i < 5; i++){
       replies.push_back(SlotState());
     }
+    if (loc_id_ != 3){
+      Coroutine::Sleep(50000);
+    }
     // Phase 0: If not leader, then propose with random priority
-    if (s%4 == 0 && (s>4 || loc_id_!=leader_id_)){
+    if (s%4 == 0 && (s>4 || loc_id_!=3)){
        for (int i = 0; i < 5; i++){
          proposals[i].priority = generateRandomPriority() - 1;
        }
     }
+
     // Send record(step, proposal) to all recorders
     uint64_t majority = 1;
     for (int i = 0; i < 5; i++){
@@ -213,7 +234,11 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
             Proposal chosenProposal = proposals[loc_id_];
             uint64_t value = chosenProposal.value;
             Log_info("Value chosen is %d at index %d", value, slot);
-            commitChosenValue(slot, value);
+              if (committedValues.find(slot) != committedValues.end()){
+              role = RECORDER;
+              return;
+            }
+          commitChosenValue(slot, value);
             role = RECORDER;
             return;
         }
@@ -233,6 +258,11 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
         if (p == bestOfAggregateProposal){
             uint64_t value = p.value;
             Log_info("Value chosen is %d at index %d", value, slot);
+             if (committedValues.find(slot) != committedValues.end()){
+              role = RECORDER;
+              return;
+            }
+ 
             commitChosenValue(slot, value);
             role = RECORDER;
             return; 
@@ -283,14 +313,14 @@ Proposal QuePaxaServer::findBestOfAggregateProposals(const vector<SlotState>& re
     uint64_t highestPriority = 0;
 
     for (int i = 0; i < replies.size(); ++i) {
-        if (replies[i].Ac.priority > highestPriority) {
+        if (replies[i].Ap.priority > highestPriority) {
             bestIndex = i; 
-            highestPriority = replies[i].Ac.priority;
+            highestPriority = replies[i].Ap.priority;
         }
     }
 
     if (bestIndex != -1) {
-        return replies[bestIndex].Ac;
+        return replies[bestIndex].Ap;
     } else {
         return Proposal(0, 0, 0);
     }
@@ -322,23 +352,21 @@ uint64_t QuePaxaServer::findMaxStep(const vector<SlotState>& replies) {
     return maxStep;
 }
 
-shared_ptr<Marshallable> QuePaxaServer::convertValueToCommand(uint64_t value) {
-    auto cmdptr = std::make_shared<TpcCommitCommand>();
-    auto vpd_p = std::make_shared<VecPieceData>();
-    vpd_p->sp_vec_piece_data_ = std::make_shared<vector<shared_ptr<SimpleCommand>>>();
-    cmdptr->tx_id_ = value;
-    cmdptr->cmd_ = vpd_p;
-    auto cmdptr_m = dynamic_pointer_cast<Marshallable>(cmdptr);
-    return cmdptr_m;
+shared_ptr<Marshallable> QuePaxaServer::convertValueToCommand(uint64_t slot, uint64_t value) {
+  auto state = make_shared<QuePaxaCommitMarshallable>();
+  state->slot = slot;
+  state->value = value;
+  shared_ptr<Marshallable> st(state);
+  return st;
 }
 
 void QuePaxaServer::commitChosenValue(uint64_t slot, uint64_t value){
   committedValues[slot] = value;
-  auto cmdptr_m = convertValueToCommand(value);
+  auto cmdptr_m = convertValueToCommand(slot, value);
   app_next_(*cmdptr_m);
   for (int i = 0; i < 5; i++){
     if (i!=loc_id_){
-      commo()->SendCommit(0, i, slot, cmdptr_m);
+      commo()->SendCommit(0, i, cmdptr_m);
     }
   }
 }

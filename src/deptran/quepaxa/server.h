@@ -16,6 +16,9 @@ enum ROLE {
     RECORDER
 };
 
+
+
+
 class Proposal {
 private:
     friend class boost::serialization::access;
@@ -59,15 +62,33 @@ public:
     SlotState() : currentStep(0), Fc(0, 0, 0), Ac(0, 0, 0), Ap(0, 0, 0) {}
 
 public:
-    uint64_t currentStep;
-    Proposal Fc;
-    Proposal Ac;
-    Proposal Ap;
+    uint64_t currentStep; // current step
+    Proposal Fc; // First proposal seen in current step
+    Proposal Ac; // Maximum priority proposal seen till now
+    Proposal Ap; // Maximum priority proposal seen in previous step
 };
 
 
 namespace janus {
 
+
+class QuePaxaCommitMarshallable : public Marshallable {
+ public:
+  QuePaxaCommitMarshallable() : Marshallable(MarshallDeputy::CMD_QUEPAXA_COMMIT) {}  
+  uint64_t slot;
+  uint64_t value;
+  Marshal& ToMarshal(Marshal& m) const override {
+    m << slot;
+    m << value;
+    return m;
+  }
+
+  Marshal& FromMarshal(Marshal& m) override {
+    m >> slot;
+    m >> value;
+    return m;
+  }
+};
 
 class QuePaxaServer : public TxLogServer {
  public:
@@ -84,13 +105,13 @@ class QuePaxaServer : public TxLogServer {
  Proposal findBestOfAggregateProposals(const vector<SlotState>& replies);
  Proposal findMaxStepProposal(const vector<SlotState>& replies);
  uint64_t findMaxStep(const vector<SlotState>& replies);
- void handleCommit(const uint64_t &slot, shared_ptr<Marshallable> &cmd);
- shared_ptr<Marshallable> convertValueToCommand(uint64_t value);
+ void handleCommit(shared_ptr<Marshallable> &cmd);
+ shared_ptr<Marshallable> convertValueToCommand(uint64_t slot, uint64_t value);
  void commitChosenValue(uint64_t slot, uint64_t value);
 
 
  private:
-  uint64_t leader_id_ = 1; 
+  uint64_t leader_id_ = 3; 
   uint64_t proposerId = loc_id_;
   ROLE role = RECORDER;
 
@@ -99,7 +120,7 @@ class QuePaxaServer : public TxLogServer {
   ~QuePaxaServer() ;
 
   void Start(shared_ptr<Marshallable>& cmd, uint64_t *index);
-  void GetState(uint64_t *result);
+  void GetState(uint64_t slot, uint64_t *result);
  private:
   bool disconnected_ = false;
   void Setup();

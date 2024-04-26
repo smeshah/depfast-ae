@@ -43,7 +43,7 @@ class QuePaxaTestConfig {
  private:
   static QuePaxaFrame **replicas;
   static std::function<void(Marshallable &)> commit_callbacks[NSERVERS];
-  static std::vector<int> committed_cmds[NSERVERS];
+  static std::unordered_map<int, int> committed_cmds[NSERVERS];
   static uint64_t rpc_count_last[NSERVERS];
 
   // disconnected_[svr] true if svr is disconnected by Disconnect()/Reconnect()

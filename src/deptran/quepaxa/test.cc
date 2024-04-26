@@ -11,7 +11,8 @@ int QuePaxaLabTest::Run(void) {
       testBasicAgree() ||
       testFailNoQuorum() ||
       testConcurrentStarts() ||
-      testConcurrentStarts2()
+      testConcurrentStarts2() ||
+      testConcurrentStarts3()
     ) {
     Print("TESTS FAILED");
     return 1;
@@ -69,18 +70,21 @@ void QuePaxaLabTest::Cleanup(void) {
 //         index_ = r + 1; \
 //       }
 
+
+// Basic Agreement
 int QuePaxaLabTest::testBasicAgree(void) {
   Init2(1, "Basic agreement");
   for (int i = 1; i <= 5; i++) {
     // complete 1 agreement and make sure its index is as expected
     int cmd = 100 + i;
     // AssertNoneCommitted(cmd);
-    uint64_t proposer = 0;
+    uint64_t proposer = 3;
     DoAgreeAndAssertNCommitted(cmd, NSERVERS, proposer);
   }
   Passed2();
 }
 
+// No agreement if majority of servers are disconnected
 int QuePaxaLabTest::testFailNoQuorum(void) {
   Init2(2, "No agreement if too many servers disconnect");
   uint64_t proposer = 3;
@@ -124,6 +128,7 @@ static void *doConcurrentStarts(void *args) {
   return nullptr;
 }
 
+// Concurrently started agreements on the same proposer
 int QuePaxaLabTest::testConcurrentStarts(void) {
   Init2(3, "Concurrently started agreements");
   int nconcurrent = 5;
@@ -133,7 +138,7 @@ int QuePaxaLabTest::testConcurrentStarts(void) {
       wait(3000000);
     }
     uint64_t index;
-    uint64_t proposer = 4;
+    uint64_t proposer = 3;
     // auto ok = config_->Start(0, 701, &index);
     // if (!ok) {
     //   continue; // retry (up to 5 times)
@@ -167,10 +172,10 @@ int QuePaxaLabTest::testConcurrentStarts(void) {
       cmds.push_back(cmd);
     }
     // make sure all the commits are there with the correct values
-    for (int i = 0; i < nconcurrent; i++) {
-      auto val = 301 + i;
-      int j;
-      for (j = 0; j < cmds.size(); j++) {
+    for (int j = 0; j < cmds.size(); j++) {
+      int val = 0;
+      for (int i = 0; i < nconcurrent; i++) {
+        val = 301 + i;
         if (cmds[j] == val) {
           break;
         }
@@ -186,10 +191,12 @@ int QuePaxaLabTest::testConcurrentStarts(void) {
   Passed2();
 }
 
-
+// Concurrently started agreements on different proposers
+// Commands committed out of order need to send (slot, value) to client to maintain order.
+// Expected: one of the two commands with the same slot number should be committed.
 int QuePaxaLabTest::testConcurrentStarts2(void) {
   Init2(4, "Concurrently started agreements - on different proposers");
-  int nconcurrent = 5;
+  int nconcurrent = 20;
   bool success = false;
   for (int again = 0; again < 5; again++) {
     if (again > 0) {
@@ -226,31 +233,29 @@ int QuePaxaLabTest::testConcurrentStarts2(void) {
     for (int i = 0; i < nconcurrent; i++) {
       verify(pthread_join(threads[i], nullptr) == 0);
     }
-    // wait for all indices to commit
-    for (auto index : indices){
-      Log_info("Waiting for index %ld", index);
-    }
-    for (auto index : indices) {
+    std::set<int> indicesSet(indices.begin(), indices.end());
+
+    for (auto index : indicesSet) {
       int cmd = config_->Wait(index, NSERVERS);
       if (cmd < 0) {
         AssertWaitNoError(cmd, index);
-        goto skip; // on timeout and term changes, try again
+        goto skip; // on timeout try again
       }
       cmds.push_back(cmd);
     }
     // make sure all the commits are there with the correct values
 
-    
-    for (int i = 0; i < nconcurrent; i++) {
-      auto val = 401 + i;
-      auto val2 = 501 + i;
-      int j;
-      for (j = 0; j < cmds.size(); j++) {
+    for (int j = 0; j < cmds.size(); j++) {
+      int val = 0;
+      int val2 = 0;
+      for (int i = 0; i < nconcurrent; i++) {
+        val = 401 + i;
+        val2 = 501 + i;
         if (cmds[j] == val || cmds[j] == val2) {
           break;
         }
       }
-      Assert2(j < cmds.size(), "cmd %d missing", val);
+      Assert2(j < cmds.size(), "cmd %d or %d missing", val, val2);
     }
     success = true;
     break;
@@ -260,6 +265,87 @@ int QuePaxaLabTest::testConcurrentStarts2(void) {
   index_ += nconcurrent + 1;
   Passed2();
 }
+
+// Concurrently started agreements on different proposers
+// Commands committed out of order need to send (slot, value) to client to maintain order.
+// Expected: only commands submitted to leader should be committed.
+int QuePaxaLabTest::testConcurrentStarts3(void) {
+  Init2(5, "Concurrently started agreements - on leader and non-leader");
+  int nconcurrent = 20;
+  bool success = false;
+  for (int again = 0; again < 5; again++) {
+    if (again > 0) {
+      wait(3000000);
+    }
+    uint64_t index;
+    // assume proposer 0 is the leader
+    uint64_t proposer = 3;
+
+    std::vector<uint64_t> indices{};
+    std::vector<int> cmds{};
+    std::mutex mtx{};
+    pthread_t threads[nconcurrent];
+
+    for (int i = 0; i < nconcurrent; i++) {
+      CSArgs *args = new CSArgs{};
+      args->indices = &indices;
+      args->mtx = &mtx;
+      args->i = i;
+      args->startTxid = 601;
+      args->proposer = proposer;
+      verify(pthread_create(&threads[i], nullptr, doConcurrentStarts, (void*)args) == 0);
+    }
+
+    for (int i = 0; i < nconcurrent; i++) {
+      CSArgs *args = new CSArgs{};
+      args->indices = &indices;
+      args->mtx = &mtx;
+      args->i = i;
+      args->startTxid = 701;
+      args->proposer = (proposer + 1)%5;
+      verify(pthread_create(&threads[i], nullptr, doConcurrentStarts, (void*)args) == 0);
+    }
+    // join all threads
+    for (int i = 0; i < nconcurrent; i++) {
+      verify(pthread_join(threads[i], nullptr) == 0);
+    }
+    // wait for all indices to commit
+
+    std::set<int> indicesSet(indices.begin(), indices.end());
+
+    for (auto index : indicesSet) {
+      int cmd = config_->Wait(index, NSERVERS);
+      if (cmd < 0) {
+        AssertWaitNoError(cmd, index);
+        goto skip; // on timeout try again
+      }
+      cmds.push_back(cmd);
+    }
+    // make sure all the commits are there with the correct values
+
+    for (int j = 0; j < cmds.size(); j++) {
+      int val = 0;
+      int val2 = 0;
+      for (int i = 0; i < nconcurrent; i++) {
+        val = 601 + i;
+        val2 = 701 + i;
+        Assert2(cmds[j] != val2, "cmd %d committed even though leader is active", cmds[j]);
+        if (cmds[j] == val) {
+          break;
+        }
+      }
+      Assert2(j < cmds.size(), "cmd %d or %d missing", val, val2);
+    }
+    success = true;
+    break;
+    skip: ;
+  }
+  Assert2(success, "failed - delayed responses");
+  index_ += nconcurrent + 1;
+  Passed2();
+}
+
+
 
 // Test case - request is submitted to two different proposers who are not leader for the same slot concurrently
 
