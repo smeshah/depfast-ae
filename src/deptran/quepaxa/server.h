@@ -108,7 +108,7 @@ class QuePaxaServer : public TxLogServer {
  void handleCommit(shared_ptr<Marshallable> &cmd);
  shared_ptr<Marshallable> convertValueToCommand(uint64_t slot, uint64_t value);
  void commitChosenValue(uint64_t slot, uint64_t value);
-
+ bool checkAlreadyCommitted(uint64_t slot, uint64_t value);
 
  private:
   uint64_t leader_id_ = 3; 

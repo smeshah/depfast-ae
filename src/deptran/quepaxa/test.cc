@@ -58,11 +58,12 @@ void QuePaxaLabTest::Cleanup(void) {
 
 #define DoAgreeAndAssertNCommitted(cmd, n, proposer) { \
         auto r = config_->DoAgreement(cmd, n, proposer); \
+        Assert2(r >= 0, "failed to reach agreement for command %d among %d servers", cmd, n); \
       }
       
 #define DoAgreeAndAssertNoneCommitted(cmd, n, proposer) { \
         auto r = config_->DoAgreement(cmd,n, proposer); \
-        Assert2(r == 0, "committed command %d without majority", cmd); \
+        Assert2(r < 0, "committed command %d without majority", cmd); \
       }
 // #define DoAgreeAndAssertWaitSuccess(cmd, n) { \
 //         auto r = config_->DoAgreement(cmd, n, true); \
@@ -99,7 +100,7 @@ int QuePaxaLabTest::testFailNoQuorum(void) {
   config_->Reconnect((proposer+1)%5);
   config_->Reconnect((proposer+2)%5);
   config_->Reconnect((proposer+3)%5);
-  Coroutine::Sleep(500000);
+  // Coroutine::Sleep(500000);
   
   Passed2();
 }
@@ -130,7 +131,7 @@ static void *doConcurrentStarts(void *args) {
 
 // Concurrently started agreements on the same proposer
 int QuePaxaLabTest::testConcurrentStarts(void) {
-  Init2(3, "Concurrently started agreements");
+  Init2(3, "Concurrently started agreements - on same proposer");
   int nconcurrent = 5;
   bool success = false;
   for (int again = 0; again < 5; again++) {
@@ -243,8 +244,10 @@ int QuePaxaLabTest::testConcurrentStarts2(void) {
       }
       cmds.push_back(cmd);
     }
-    // make sure all the commits are there with the correct values
+    Log_info("Cmds sz: %d", cmds.size());
+    Assert2(cmds.size() == nconcurrent, "not all commands committed");
 
+    // make sure all the commits are there with the correct values
     for (int j = 0; j < cmds.size(); j++) {
       int val = 0;
       int val2 = 0;
@@ -322,7 +325,8 @@ int QuePaxaLabTest::testConcurrentStarts3(void) {
       cmds.push_back(cmd);
     }
     // make sure all the commits are there with the correct values
-
+    Log_info("Cmds sz: %d", cmds.size());
+    Assert2(cmds.size() == nconcurrent, "not all commands committed");
     for (int j = 0; j < cmds.size(); j++) {
       int val = 0;
       int val2 = 0;

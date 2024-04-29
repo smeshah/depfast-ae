@@ -112,7 +112,7 @@ int QuePaxaTestConfig::DoAgreement(int cmd, int n, int proposer) {
     }
   }
   Log_debug("Failed to reach agreement end");
-  return 0;
+  return -1;
 }
 
 void QuePaxaTestConfig::Disconnect(int svr) {

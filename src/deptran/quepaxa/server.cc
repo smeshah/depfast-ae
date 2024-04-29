@@ -77,6 +77,9 @@ void QuePaxaServer::GetState(uint64_t slot, uint64_t *value) {
   *value = committedValues[slot];
 }
 
+
+// Push (curSlot, tx_id) to reqs
+// send curslot back to client where command will be committed, increment curslot
 void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
   /* Your code here. This function can be called from another OS thread. */
   // pending_values.push(value);
@@ -91,66 +94,10 @@ void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
     role = PROPOSER;
 }
 
-
-void QuePaxaServer::handleCommit(shared_ptr<Marshallable> &cmd) {
-  std::lock_guard<std::recursive_mutex> lock(mtx_);
-  auto state = dynamic_pointer_cast<QuePaxaCommitMarshallable>(cmd);
-  Log_info("handleCommit method called with value %lu", state->value);
-  // if (committedValues.find(state->slot) != committedValues.end()){
-  //   return;
-  // }
-  committedValues[state->slot] = state->value;
-  curSlot = max(curSlot, state->slot + 1);
-  Log_info("Current slot at %d is %d", loc_id_, curSlot);
-  app_next_(*cmd);
-}
-
-void QuePaxaServer::intervalSummaryRegister(const uint64_t &index, const uint64_t &step, const string &proposalData, string *slotStateData) {
-    Log_info("Interval summary register called with index %lu, step %lu, proposalData %s", index, step, proposalData.c_str());
-
-    if (committedValues.find(index) != committedValues.end()){
-        return;
-    }
-    if (role == PROPOSER){
-        return;
-    }
-    if (slotStates.find(index) == slotStates.end()){
-        slotStates[index] = SlotState();
-    }
-
-    std::stringstream ss(proposalData);
-    Proposal proposal;
-    boost::archive::text_iarchive ia(ss);
-    ia >> proposal;
-    
-    SlotState state = slotStates[index];
-    if (state.currentStep == step){
-        if (proposal.priority > state.Ac.priority){
-            state.Ac = proposal;
-        }
-    }
-    else if (state.currentStep < step){
-        if (step == state.currentStep + 1){
-            state.Ap = state.Ac;
-        }
-        else {
-            state.Ap = Proposal(0, 0, 0);
-        }
-        state.currentStep = step;
-        state.Fc = proposal;
-        state.Ac = proposal;
-    }
-    slotStates[index] = state;
-
-    std::stringstream ss2;
-    boost::archive::text_oarchive oa(ss2);
-    oa << state;
-    *slotStateData = ss2.str();
-}
-
+// Propose method
 void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
   Log_info("Propose method called with value %lu", value);
-  slotStates[curSlot] = SlotState();
+
   uint64_t s = 4 * 1 + 0;
   uint64_t H = 100;
   Proposal p(H, proposerId, value);
@@ -161,15 +108,16 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
   while (true){
     Coroutine::Sleep(10000);
     // If slot already taken by another proposer return
-    if (committedValues.find(slot) != committedValues.end()){
-      role = RECORDER;
+    if (checkAlreadyCommitted(slot, value)){
       return;
     }
     vector<SlotState> replies;
     for (int i = 0; i < 5; i++){
       replies.push_back(SlotState());
     }
-    if (loc_id_ != 3){
+    // Artificial delay to make leader performance is better
+    if (loc_id_ != leader_id_){
+      Log_info("Not leader");
       Coroutine::Sleep(50000);
     }
     // Phase 0: If not leader, then propose with random priority
@@ -234,11 +182,10 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
             Proposal chosenProposal = proposals[loc_id_];
             uint64_t value = chosenProposal.value;
             Log_info("Value chosen is %d at index %d", value, slot);
-              if (committedValues.find(slot) != committedValues.end()){
-              role = RECORDER;
+            if (checkAlreadyCommitted(slot, value)){
               return;
             }
-          commitChosenValue(slot, value);
+            commitChosenValue(slot, value);
             role = RECORDER;
             return;
         }
@@ -248,9 +195,9 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
         }
       }
       // Phase 1, Spread E existent proposal (best proposal p) to all recorders
-      // if (s%4 == 1){
-      //   continue;
-      // }
+      if (s%4 == 1){
+        continue;
+      }
       // Phase 2, Gather E existent proposal from all recorders, spread C common proposal to all recorders
       if (s%4 == 2){
         Log_info("In Phase 2");
@@ -258,11 +205,9 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
         if (p == bestOfAggregateProposal){
             uint64_t value = p.value;
             Log_info("Value chosen is %d at index %d", value, slot);
-             if (committedValues.find(slot) != committedValues.end()){
-              role = RECORDER;
+            if (checkAlreadyCommitted(slot, value)){
               return;
             }
- 
             commitChosenValue(slot, value);
             role = RECORDER;
             return; 
@@ -285,6 +230,64 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
   }
 }
 
+
+// receiver/recorder handlers
+void QuePaxaServer::intervalSummaryRegister(const uint64_t &index, const uint64_t &step, const string &proposalData, string *slotStateData) {
+    Log_info("Interval summary register called with index %lu, step %lu, proposalData %s", index, step, proposalData.c_str());
+
+    if (committedValues.find(index) != committedValues.end()){
+        return;
+    }
+    if (role == PROPOSER){
+        return;
+    }
+    if (slotStates.find(index) == slotStates.end()){
+        slotStates[index] = SlotState();
+    }
+
+    std::stringstream ss(proposalData);
+    Proposal proposal;
+    boost::archive::text_iarchive ia(ss);
+    ia >> proposal;
+    
+    SlotState state = slotStates[index];
+    if (state.currentStep == step){
+        if (proposal.priority > state.Ac.priority){
+            state.Ac = proposal;
+        }
+    }
+    else if (state.currentStep < step){
+        if (step == state.currentStep + 1){
+            state.Ap = state.Ac;
+        }
+        else {
+            state.Ap = Proposal(0, 0, 0);
+        }
+        state.currentStep = step;
+        state.Fc = proposal;
+        state.Ac = proposal;
+    }
+    slotStates[index] = state;
+
+    std::stringstream ss2;
+    boost::archive::text_oarchive oa(ss2);
+    oa << state;
+    *slotStateData = ss2.str();
+}
+
+void QuePaxaServer::handleCommit(shared_ptr<Marshallable> &cmd) {
+  std::lock_guard<std::recursive_mutex> lock(mtx_);
+  auto state = dynamic_pointer_cast<QuePaxaCommitMarshallable>(cmd);
+  Log_info("handleCommit method called with value %lu", state->value);
+  // if (committedValues.find(state->slot) != committedValues.end()){
+  //   return;
+  // }
+  committedValues[state->slot] = state->value;
+  curSlot = max(curSlot, state->slot + 1);
+  app_next_(*cmd);
+}
+
+// Helper functions
 uint64_t QuePaxaServer::generateRandomPriority() {
   return (rand() % 100);
 }
@@ -369,6 +372,17 @@ void QuePaxaServer::commitChosenValue(uint64_t slot, uint64_t value){
       commo()->SendCommit(0, i, cmdptr_m);
     }
   }
+}
+
+bool QuePaxaServer::checkAlreadyCommitted(uint64_t slot, uint64_t value){
+  if (committedValues.find(slot) != committedValues.end()){
+    role = RECORDER;
+    // should we commit on next free slot or ignore?
+    // reqs.push_back(std::make_pair(curSlot, value));
+    // curSlot++;
+    return true;
+  }
+  return false;
 }
 
 /* Do not modify any code below here */
