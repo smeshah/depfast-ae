@@ -32,21 +32,39 @@ QuePaxaCommo::SendString(parid_t par_id, siteid_t site_id, const string& msg, st
   }
   return ev;
 }
-shared_ptr<IntEvent>
-QuePaxaCommo::SendToRecoder(parid_t par_id, siteid_t site_id, const uint64_t& curSlot, const uint64_t& step, const string& proposalData, string* slotStateData){
+shared_ptr<RecorderQuorumEvent>
+QuePaxaCommo::SendToRecoder(parid_t par_id, siteid_t site_id, const uint64_t& curSlot, const uint64_t& step, Proposal proposal){
   auto proxies = rpc_par_proxies_[par_id];
-  auto ev = Reactor::CreateSpEvent<IntEvent>();
+  auto ev = Reactor::CreateSpEvent<RecorderQuorumEvent>(NSERVERS, NSERVERS/2);
   for (auto& p : proxies) {
-    if (p.first == site_id) {
+    if (p.first != site_id) {
       QuePaxaProxy *proxy = (QuePaxaProxy*) p.second;
       FutureAttr fuattr;
-      fuattr.callback = [slotStateData,ev](Future* fu) {
-        fu->get_reply() >> *slotStateData;
-        ev->Set(1);
+      fuattr.callback = [ev](Future* fu) {
+        string slotStateData = "";
+        fu->get_reply() >> slotStateData;
+        if (slotStateData != ""){  
+          std::stringstream ss(slotStateData);
+          SlotState state;
+          boost::archive::text_iarchive ia(ss);
+          ia >> state;
+          ev->VoteYes(state);
+        }
+        else{
+          ev->VoteNo();
+        }
       };
+      if (step%4 == 0 && (step>4 || site_id!=cur_leader)){
+        proposal.priority = (rand() % 100) - 1;
+      }
+      std::stringstream ss;
+      boost::archive::text_oarchive oa(ss);
+      oa << proposal;
+      string proposalData = ss.str();
+
       /* wrap Marshallable in a MarshallDeputy to send over RPC */
       Call_Async(proxy, SendToRecoderRpc, curSlot, step, proposalData, fuattr);
-    }
+      }
   }
   return ev;
 }

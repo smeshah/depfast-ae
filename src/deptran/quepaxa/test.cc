@@ -100,7 +100,7 @@ int QuePaxaLabTest::testFailNoQuorum(void) {
   config_->Reconnect((proposer+1)%5);
   config_->Reconnect((proposer+2)%5);
   config_->Reconnect((proposer+3)%5);
-  // Coroutine::Sleep(500000);
+  Coroutine::Sleep(500000);
   
   Passed2();
 }
@@ -289,15 +289,6 @@ int QuePaxaLabTest::testConcurrentStarts3(void) {
     std::mutex mtx{};
     pthread_t threads[nconcurrent];
 
-    for (int i = 0; i < nconcurrent; i++) {
-      CSArgs *args = new CSArgs{};
-      args->indices = &indices;
-      args->mtx = &mtx;
-      args->i = i;
-      args->startTxid = 601;
-      args->proposer = proposer;
-      verify(pthread_create(&threads[i], nullptr, doConcurrentStarts, (void*)args) == 0);
-    }
 
     for (int i = 0; i < nconcurrent; i++) {
       CSArgs *args = new CSArgs{};
@@ -308,6 +299,16 @@ int QuePaxaLabTest::testConcurrentStarts3(void) {
       args->proposer = (proposer + 1)%5;
       verify(pthread_create(&threads[i], nullptr, doConcurrentStarts, (void*)args) == 0);
     }
+    for (int i = 0; i < nconcurrent; i++) {
+      CSArgs *args = new CSArgs{};
+      args->indices = &indices;
+      args->mtx = &mtx;
+      args->i = i;
+      args->startTxid = 601;
+      args->proposer = proposer;
+      verify(pthread_create(&threads[i], nullptr, doConcurrentStarts, (void*)args) == 0);
+    }
+
     // join all threads
     for (int i = 0; i < nconcurrent; i++) {
       verify(pthread_join(threads[i], nullptr) == 0);

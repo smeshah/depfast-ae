@@ -100,67 +100,32 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
 
   uint64_t s = 4 * 1 + 0;
   uint64_t H = 100;
-  Proposal p(H, proposerId, value);
-  vector<Proposal> proposals;
-  for (int i = 0; i < 5; i++){
-    proposals.push_back(p);
-  }
+  Proposal proposal(H, proposerId, value);
   while (true){
     Coroutine::Sleep(10000);
     // If slot already taken by another proposer return
     if (checkAlreadyCommitted(slot, value)){
       return;
     }
-    vector<SlotState> replies;
-    for (int i = 0; i < 5; i++){
-      replies.push_back(SlotState());
-    }
     // Artificial delay to make leader performance is better
-    if (loc_id_ != leader_id_){
+    if (loc_id_ != cur_leader){
       Log_info("Not leader");
       Coroutine::Sleep(50000);
     }
-    // Phase 0: If not leader, then propose with random priority
-    if (s%4 == 0 && (s>4 || loc_id_!=3)){
-       for (int i = 0; i < 5; i++){
-         proposals[i].priority = generateRandomPriority() - 1;
-       }
-    }
-
+ 
     // Send record(step, proposal) to all recorders
-    uint64_t majority = 1;
-    for (int i = 0; i < 5; i++){
-      if (i == loc_id_){
-        continue;
-      }
 
-      std::stringstream ss;
-      boost::archive::text_oarchive oa(ss);
-      oa << proposals[i];
-      string proposalData = ss.str();
-
-      string slotStateData = "";
-
-      auto event = commo()->SendToRecoder(0, i, slot, s, proposalData, &slotStateData);
-      event->Wait(100000);
-      Log_info("Slot state from %d data is %s", i, slotStateData.c_str());
-      if (slotStateData != ""){
-        std::stringstream ss2(slotStateData);
-        SlotState state;
-        boost::archive::text_iarchive ia(ss2);
-        ia >> state;
-        replies[i] = state;
-        majority += 1;
-      }
-    }
-    if (majority < 3){
-      continue;
-    }
+    auto event = commo()->SendToRecoder(0, loc_id_, slot, s, proposal);
+    event->Wait(100000);
     // Process replies (step, Fc, Ap)
     // Check if all replies have the same step
+    Log_info("Replies size is %d", event->replies.size());
+    if (event->replies.size() < 2){
+      continue;
+    }
     bool allRepliesHaveSameStep = true;
-    for (int i = 0; i < 5; i++){
-      if (replies[i].currentStep!=0 && i!=loc_id_ && replies[i].currentStep != s){
+    for (int i = 0; i < event->replies.size(); i++){
+      if (event->replies[i].currentStep!=0 && i!=loc_id_ && event->replies[i].currentStep != s){
         allRepliesHaveSameStep = false;
         break;
       }
@@ -170,8 +135,8 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
       if (s%4 == 0){
         Log_info("In Phase 0");
         bool allRepliesHaveSamePriority = true;
-        for (int i = 0; i < 5; i++){
-          if (replies[i].currentStep!=0 && i!=loc_id_ && replies[i].Fc.priority != proposals[i].priority){
+        for (int i = 0; i < event->replies.size(); i++){
+          if (event->replies[i].currentStep!=0 && i!=loc_id_ && event->replies[i].Fc.priority != proposal.priority){
             allRepliesHaveSamePriority = false;
             break;
           }
@@ -179,35 +144,40 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
         // If all replies have the same priority, then choose the value with the highest priority
         // Commit the value and return
         if (allRepliesHaveSamePriority == true){
-            Proposal chosenProposal = proposals[loc_id_];
+            Proposal chosenProposal = proposal;
             uint64_t value = chosenProposal.value;
-            Log_info("Value chosen is %d at index %d", value, slot);
             if (checkAlreadyCommitted(slot, value)){
+              role = RECORDER;
               return;
             }
+            Log_info("Value chosen is %d at index %d", value, slot);
+
             commitChosenValue(slot, value);
             role = RECORDER;
             return;
         }
         // If all replies do not have the same priority, then choose the value with the highest priority
         else {
-            p = findBestOfFirstSeenProposals(replies);
+            Log_info("All replies don't have same priority");
+            proposal = findBestOfFirstSeenProposals(event->replies);
         }
       }
-      // Phase 1, Spread E existent proposal (best proposal p) to all recorders
-      if (s%4 == 1){
-        continue;
-      }
+      // Phase 1, Spread E existent proposal (best proposal proposal) to all recorders
+      // if (s%4 == 1){
+      //   
+      // }
       // Phase 2, Gather E existent proposal from all recorders, spread C common proposal to all recorders
       if (s%4 == 2){
         Log_info("In Phase 2");
-        Proposal bestOfAggregateProposal = findBestOfAggregateProposals(replies);
-        if (p == bestOfAggregateProposal){
-            uint64_t value = p.value;
-            Log_info("Value chosen is %d at index %d", value, slot);
+        Proposal bestOfAggregateProposal = findBestOfAggregateProposals(event->replies);
+        if (proposal == bestOfAggregateProposal){
+            uint64_t value = proposal.value;
             if (checkAlreadyCommitted(slot, value)){
+              role = RECORDER;
               return;
             }
+            Log_info("Value chosen is %d at index %d", value, slot);
+
             commitChosenValue(slot, value);
             role = RECORDER;
             return; 
@@ -217,15 +187,15 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
       // Phase 3, Gather C common proposal from all recorders
       if (s%4 == 3){
         Log_info("In Phase 3");
-        p = findBestOfAggregateProposals(replies); 
+        proposal = findBestOfAggregateProposals(event->replies); 
       }
       s += 1;
     }
     else if (allRepliesHaveSameStep == false){
       Log_info("All replies don't have same step");
-      Proposal maxStepProposal = findMaxStepProposal(replies);
-      p = maxStepProposal;
-      s = findMaxStep(replies);
+      Proposal maxStepProposal = findMaxStepProposal(event->replies);
+      proposal = maxStepProposal;
+      s = findMaxStep(event->replies);
     }
   }
 }
@@ -369,7 +339,7 @@ void QuePaxaServer::commitChosenValue(uint64_t slot, uint64_t value){
   app_next_(*cmdptr_m);
   for (int i = 0; i < 5; i++){
     if (i!=loc_id_){
-      commo()->SendCommit(0, i, cmdptr_m);
+      auto event = commo()->SendCommit(0, i, cmdptr_m);
     }
   }
 }
