@@ -20,6 +20,8 @@ class QuePaxaServiceImpl : public QuePaxaService {
  public:
   QuePaxaServer* svr_;
   QuePaxaServiceImpl(TxLogServer* sched);
+  RpcHandler(Start, 1,
+             const MarshallDeputy&, md_cmd) {};
   RpcHandler(HelloRpc, 2, const string&, req, string*, res) {
     *res = ""; 
   };
@@ -29,7 +31,14 @@ class QuePaxaServiceImpl : public QuePaxaService {
   };
   RpcHandler(SendCommitRpc, 1, const MarshallDeputy&, md_cmd) {
   };
-  
+  RpcHandler(CollectMetrics, 3,
+             uint64_t*, fast_path_count,
+             vector<double>*, commit_times,
+             vector<double>*, exec_times) {
+    *fast_path_count = 0;
+    *commit_times = vector<double>();
+    *exec_times = vector<double>();
+  }
 };
 
 } // namespace janus

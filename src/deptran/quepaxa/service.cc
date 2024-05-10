@@ -10,6 +10,15 @@ QuePaxaServiceImpl::QuePaxaServiceImpl(TxLogServer *sched) : svr_((QuePaxaServer
 	clock_gettime(CLOCK_MONOTONIC_RAW, &curr_time);
 	srand(curr_time.tv_nsec);
 }
+
+void QuePaxaServiceImpl::HandleStart(const MarshallDeputy& md_cmd,
+                                    rrr::DeferredReply* defer) {
+  shared_ptr<Marshallable> cmd = const_cast<MarshallDeputy&>(md_cmd).sp_data_;
+  Coroutine::CreateRun([this, defer, cmd]() mutable {
+    uint64_t index;
+    svr_->Start(cmd, &index, std::bind(&rrr::DeferredReply::reply, defer));
+  });
+}
   void QuePaxaServiceImpl::HandleHelloRpc(const string& req,
                                      string* res,
                                      rrr::DeferredReply* defer) {
@@ -33,5 +42,12 @@ QuePaxaServiceImpl::QuePaxaServiceImpl(TxLogServer *sched) : svr_((QuePaxaServer
   svr_->handleCommit(value);
   defer->reply();
   }
-
+void QuePaxaServiceImpl::HandleCollectMetrics(uint64_t* fast_path_count,
+                                             vector<double>* commit_times,
+                                             vector<double>* exec_times,
+                                             rrr::DeferredReply* defer) {
+  *fast_path_count = svr_->fast;
+  *commit_times = svr_->commit_times;
+  defer->reply();
+}
 } // namespace janus;

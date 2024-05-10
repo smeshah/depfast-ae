@@ -34,7 +34,12 @@ class QuePaxaServer : public TxLogServer {
  unordered_map<uint64_t, uint64_t> committedValues;
  std::list<std::pair<int, int>> reqs;
  uint64_t curSlot = 0;
- 
+ map<uint64_t, Timer> start_times;
+ vector<double> commit_times;
+ map<uint64_t, function<void()>> callbacks;
+ int fast = 0;
+ int slow = 0;
+
  uint64_t generateRandomPriority();
  void propose(const uint64_t &slot, const uint64_t &value);
  void intervalSummaryRegister(const uint64_t& curSlot, const uint64_t &step, const string &proposalData,  string *slotStateData);
@@ -55,6 +60,7 @@ class QuePaxaServer : public TxLogServer {
   QuePaxaServer(Frame *frame) ;
   ~QuePaxaServer() ;
 
+  void Start(shared_ptr<Marshallable>& cmd, uint64_t *index, const function<void()> &cb);
   void Start(shared_ptr<Marshallable>& cmd, uint64_t *index);
   void GetState(uint64_t slot, uint64_t *result);
  private:

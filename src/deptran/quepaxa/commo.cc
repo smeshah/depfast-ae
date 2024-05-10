@@ -14,6 +14,27 @@ namespace janus {
 QuePaxaCommo::QuePaxaCommo(PollMgr* poll) : Communicator(poll) {
 }
 
+void
+QuePaxaCommo::SendStart(const siteid_t& site_id,
+                       const parid_t& par_id, 
+                       const shared_ptr<Marshallable>& cmd,
+                       const function<void(void)>& callback) {
+  auto proxies = rpc_par_proxies_[par_id];
+  for (auto& p : proxies) {
+    if (p.first != site_id) continue;
+    QuePaxaProxy *proxy = (QuePaxaProxy*) p.second;
+    FutureAttr fuattr;
+    fuattr.callback = [callback](Future* fu) {
+      callback();
+    };
+    MarshallDeputy md_cmd(cmd);
+    Call_Async(proxy,
+               Start,
+               md_cmd, 
+               fuattr);
+  }
+}
+
 shared_ptr<IntEvent> 
 QuePaxaCommo::SendString(parid_t par_id, siteid_t site_id, const string& msg, string* res) {
   auto proxies = rpc_par_proxies_[par_id];
@@ -87,4 +108,30 @@ QuePaxaCommo::SendCommit(parid_t par_id, siteid_t site_id,shared_ptr<Marshallabl
   }
   return ev;
 }
+
+shared_ptr<IntEvent>
+QuePaxaCommo::CollectMetrics(const siteid_t& site_id,
+               const parid_t& par_id, 
+               uint64_t *fast_path_count,
+               vector<double> *commit_times,
+               vector<double> *exec_times) {
+  auto proxies = rpc_par_proxies_[par_id];
+  auto ev = Reactor::CreateSpEvent<IntEvent>();
+  for (auto& p : proxies) {
+    if (p.first != site_id) continue;
+    QuePaxaProxy *proxy = (QuePaxaProxy*) p.second;
+    FutureAttr fuattr;
+    fuattr.callback = [ev, fast_path_count, commit_times, exec_times](Future* fu) {
+      fu->get_reply() >> *fast_path_count;
+      fu->get_reply() >> *commit_times;
+      fu->get_reply() >> *exec_times;
+      ev->Set(1);
+    };
+    Call_Async(proxy,
+               CollectMetrics, 
+               fuattr);
+  }
+  return ev;
+}
+
 } // namespace janus

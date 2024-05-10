@@ -47,7 +47,7 @@ void QuePaxaServer::Setup() {
   //       }
   //   }
   // });
-
+   
    Coroutine::CreateRun([this](){
     while(true) {
       mtx_.lock();
@@ -80,6 +80,25 @@ void QuePaxaServer::GetState(uint64_t slot, uint64_t *value) {
 
 // Push (curSlot, tx_id) to reqs
 // send curslot back to client where command will be committed, increment curslot
+void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index, const function<void()> &cb) {
+  /* Your code here. This function can be called from another OS thread. */
+  // pending_values.push(value);
+  // Log_info("Start method called with value %lu", value);
+    #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
+    auto& command = dynamic_cast<TpcCommitCommand&>(*cmd);
+    start_times[command.tx_id_].start();
+    #endif
+    shared_ptr<TpcCommitCommand> tpcCmd=std::dynamic_pointer_cast<TpcCommitCommand>(cmd);
+    reqs.push_back(std::make_pair(curSlot, (int)(tpcCmd->tx_id_)));
+    Log_info("Start method called with value %lu on loc id %d", tpcCmd->tx_id_, loc_id_);
+    *index = curSlot;
+    curSlot++;
+    Log_info("Current slot is %d", curSlot);
+    role = PROPOSER;
+    callbacks[(int)(tpcCmd->tx_id_)] = cb;
+}
+
+#ifdef QUEPAXA_TEST_CORO
 void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
   /* Your code here. This function can be called from another OS thread. */
   // pending_values.push(value);
@@ -93,11 +112,12 @@ void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
     Log_info("Current slot is %d", curSlot);
     role = PROPOSER;
 }
+#endif
 
 // Propose method
 void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
+  std::lock_guard<std::recursive_mutex> lock(mtx_);
   Log_info("Propose method called with value %lu", value);
-
   uint64_t s = 4 * 1 + 0;
   uint64_t H = 100;
   Proposal proposal(H, proposerId, value);
@@ -151,7 +171,9 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
               return;
             }
             Log_info("Value chosen is %d at index %d", value, slot);
-
+            #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
+            fast++;
+            #endif
             commitChosenValue(slot, value);
             role = RECORDER;
             return;
@@ -177,7 +199,9 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
               return;
             }
             Log_info("Value chosen is %d at index %d", value, slot);
-
+            #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
+            slow++;
+            #endif
             commitChosenValue(slot, value);
             role = RECORDER;
             return; 
@@ -203,6 +227,8 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
 
 // receiver/recorder handlers
 void QuePaxaServer::intervalSummaryRegister(const uint64_t &index, const uint64_t &step, const string &proposalData, string *slotStateData) {
+    
+    std::lock_guard<std::recursive_mutex> lock(mtx_);
     Log_info("Interval summary register called with index %lu, step %lu, proposalData %s", index, step, proposalData.c_str());
 
     if (committedValues.find(index) != committedValues.end()){
@@ -254,7 +280,13 @@ void QuePaxaServer::handleCommit(shared_ptr<Marshallable> &cmd) {
   // }
   committedValues[state->slot] = state->value;
   curSlot = max(curSlot, state->slot + 1);
+  #ifdef QUEPAXA_TEST_CORO
   app_next_(*cmd);
+  #endif
+  // #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
+  // commit_times.push_back(start_times[state->value].elapsed());
+  // callbacks[state->value]();
+  // #endif
 }
 
 // Helper functions
@@ -336,7 +368,13 @@ shared_ptr<Marshallable> QuePaxaServer::convertValueToCommand(uint64_t slot, uin
 void QuePaxaServer::commitChosenValue(uint64_t slot, uint64_t value){
   committedValues[slot] = value;
   auto cmdptr_m = convertValueToCommand(slot, value);
+  #ifdef QUEPAXA_TEST_CORO
   app_next_(*cmdptr_m);
+  #endif
+  #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
+  commit_times.push_back(start_times[value].elapsed());
+  callbacks[value]();
+  #endif
   for (int i = 0; i < 5; i++){
     if (i!=loc_id_){
       auto event = commo()->SendCommit(0, i, cmdptr_m);

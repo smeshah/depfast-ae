@@ -1,7 +1,9 @@
 namespace janus;
 
 abstract service QuePaxa {
+    defer Start(MarshallDeputy md_cmd);
     defer HelloRpc(string req | string res);  
     defer SendToRecoderRpc(uint64_t curSlot, uint64_t step, string proposalData | string slotData); 
     defer SendCommitRpc(MarshallDeputy md);   
+    defer CollectMetrics(|uint64_t fast_path_count,vector<double> commit_times, vector<double> exec_times);  
 }

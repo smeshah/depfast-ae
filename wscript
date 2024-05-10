@@ -56,6 +56,12 @@ def options(opt):
                    default=False, action='store_true')
     opt.add_option('', '--enable-quepaxa-test', dest='enable_quepaxa_test',
                    default=False, action='store_true')
+    opt.add_option('', '--enable-quepaxa-perf-test', dest='enable_quepaxa_perf_test',
+                   default=False, action='store_true')
+    opt.add_option('', '--enable-quepaxa-server-metrics-collection', dest='enable_quepaxa_server_metrics_collection',
+                   default=False, action='store_true')
+
+
     opt.parse_args();
 
 def configure(conf):
@@ -308,7 +314,12 @@ def _enable_quepaxa_test(conf):
     if Options.options.enable_quepaxa_test:
         Logs.pprint("PINK", "QuePaxa testing coroutine enabled")
         conf.env.append_value("CXXFLAGS", "-DQUEPAXA_TEST_CORO")
-
+    if Options.options.enable_quepaxa_perf_test:
+        Logs.pprint("PINK", "Quepaxa performance testing coroutine enabled")
+        conf.env.append_value("CXXFLAGS", "-DQUEPAXA_PERF_TEST_CORO")
+    if Options.options.enable_quepaxa_server_metrics_collection:
+        Logs.pprint("PINK", "Collecting server-side metrics enabled")
+        conf.env.append_value("CXXFLAGS", "-DQUEPAXA_SERVER_METRICS_COLLECTION")
 def _enable_debug(conf):
     if Options.options.debug:
         Logs.pprint("PINK", "Debug support enabled")
