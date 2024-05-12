@@ -131,7 +131,7 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
  
     // Send record(step, proposal) to all recorders
     auto event = commo()->SendToRecoder(0, loc_id_, slot, s, proposal);
-    event->Wait(100000);
+    event->Wait(rpc_timeout);
     // Process replies (step, Fc, Ap)
     // Check if all replies have the same step
     Log_info("Replies size is %d", event->replies.size());
@@ -366,6 +366,7 @@ void QuePaxaServer::commitChosenValue(uint64_t slot, uint64_t value){
   for (int i = 0; i < 5; i++){
     if (i!=loc_id_){
       auto event = commo()->SendCommit(0, i, cmdptr_m);
+      event->Wait(commit_timeout);
     }
   }
 }

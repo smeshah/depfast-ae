@@ -39,7 +39,13 @@ class QuePaxaServer : public TxLogServer {
  map<uint64_t, function<void()>> callbacks;
  int fast = 0;
  int slow = 0;
-
+#ifdef QUEPAXA_TEST_CORO
+int commit_timeout = 300000;
+int rpc_timeout = 2000000;
+#else
+int commit_timeout = 10000000; // 10 seconds
+int rpc_timeout = 5000000; // 5 seconds
+#endif
  uint64_t generateRandomPriority();
  void propose(const uint64_t &slot, const uint64_t &value);
  void intervalSummaryRegister(const uint64_t& curSlot, const uint64_t &step, const string &proposalData,  string *slotStateData);
