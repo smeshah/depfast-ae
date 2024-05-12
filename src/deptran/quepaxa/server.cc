@@ -100,9 +100,6 @@ void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index, const 
 
 #ifdef QUEPAXA_TEST_CORO
 void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
-  /* Your code here. This function can be called from another OS thread. */
-  // pending_values.push(value);
-  // Log_info("Start method called with value %lu", value);
     std::lock_guard<std::recursive_mutex> lock(mtx_);
     shared_ptr<TpcCommitCommand> tpcCmd=std::dynamic_pointer_cast<TpcCommitCommand>(cmd);
     reqs.push_back(std::make_pair(curSlot, (int)(tpcCmd->tx_id_)));
@@ -116,7 +113,6 @@ void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
 
 // Propose method
 void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
-  std::lock_guard<std::recursive_mutex> lock(mtx_);
   Log_info("Propose method called with value %lu", value);
   uint64_t s = 4 * 1 + 0;
   uint64_t H = 100;
@@ -134,7 +130,6 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
     }
  
     // Send record(step, proposal) to all recorders
-
     auto event = commo()->SendToRecoder(0, loc_id_, slot, s, proposal);
     event->Wait(100000);
     // Process replies (step, Fc, Ap)
@@ -228,7 +223,6 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
 // receiver/recorder handlers
 void QuePaxaServer::intervalSummaryRegister(const uint64_t &index, const uint64_t &step, const string &proposalData, string *slotStateData) {
     
-    std::lock_guard<std::recursive_mutex> lock(mtx_);
     Log_info("Interval summary register called with index %lu, step %lu, proposalData %s", index, step, proposalData.c_str());
 
     if (committedValues.find(index) != committedValues.end()){
@@ -275,18 +269,12 @@ void QuePaxaServer::handleCommit(shared_ptr<Marshallable> &cmd) {
   std::lock_guard<std::recursive_mutex> lock(mtx_);
   auto state = dynamic_pointer_cast<QuePaxaCommitMarshallable>(cmd);
   Log_info("handleCommit method called with value %lu", state->value);
-  // if (committedValues.find(state->slot) != committedValues.end()){
-  //   return;
-  // }
+
   committedValues[state->slot] = state->value;
   curSlot = max(curSlot, state->slot + 1);
   #ifdef QUEPAXA_TEST_CORO
   app_next_(*cmd);
   #endif
-  // #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
-  // commit_times.push_back(start_times[state->value].elapsed());
-  // callbacks[state->value]();
-  // #endif
 }
 
 // Helper functions
@@ -386,8 +374,11 @@ bool QuePaxaServer::checkAlreadyCommitted(uint64_t slot, uint64_t value){
   if (committedValues.find(slot) != committedValues.end()){
     role = RECORDER;
     // should we commit on next free slot or ignore?
-    // reqs.push_back(std::make_pair(curSlot, value));
-    // curSlot++;
+    #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
+    reqs.push_back(std::make_pair(curSlot, value));
+    curSlot++;
+    #endif
+    
     return true;
   }
   return false;

@@ -54,7 +54,7 @@ class QuePaxaClientWorker : public ClientWorker {
     vector<shared_ptr<Marshallable>> cmds(tot_req_num_);
     random_device rd;
     mt19937 gen(rd());
-    uniform_int_distribution<int> leader_distribution(0, NSERVERS - 1);
+    uniform_int_distribution<int> leader_distribution(3, 4);
     for (int i = 0; i < cmd_leader.size(); i++) {
       // Construct an empty TpcCommitCommand containing cmd as its tx_id_
       auto cmdptr = std::make_shared<TpcCommitCommand>();
