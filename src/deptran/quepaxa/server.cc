@@ -41,9 +41,9 @@ void QuePaxaServer::Setup() {
   //                                       0, "hello", &res);
   //       event->Wait(1000000); //timeout after 1000000us=1s
   //       if (event->status_ == Event::TIMEOUT) {
-  //         Log_info("timeout happens sample");
+  //         Log_debug("timeout happens sample");
   //       } else {
-  //         Log_info("rpc response is: %s", res.c_str()); 
+  //         Log_debug("rpc response is: %s", res.c_str()); 
   //       }
   //   }
   // });
@@ -57,13 +57,16 @@ void QuePaxaServer::Setup() {
       if (size == 0) {
         Coroutine::Sleep(1000);
       } else {
-        mtx_.lock();
-        std::pair<int, int> req = reqs.front();
+        std::tuple<int, int, int> req = reqs.front();
         reqs.pop_front();
         mtx_.unlock();
-        Coroutine::CreateRun([this,&req](){
-          Log_info("Processing request %d at index %d at loc_id %d", req.second, req.first, loc_id_);
-          propose(req.first, req.second);
+
+        Coroutine::CreateRun([this, req]() {
+            int curSlot = std::get<0>(req);
+            int value = std::get<1>(req);
+            int proposerId = std::get<2>(req);
+            Log_debug("Processing request %d at index %d at loc_id %d", value, curSlot, loc_id_);
+            propose(curSlot, value, proposerId);
         });
       }
     }
@@ -83,17 +86,18 @@ void QuePaxaServer::GetState(uint64_t slot, uint64_t *value) {
 void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index, const function<void()> &cb) {
   /* Your code here. This function can be called from another OS thread. */
   // pending_values.push(value);
-  // Log_info("Start method called with value %lu", value);
     #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
     auto& command = dynamic_cast<TpcCommitCommand&>(*cmd);
     start_times[command.tx_id_].start();
+    Log_debug("Start method called with value %lu at %lu", command.tx_id_, loc_id_);
+
     #endif
     shared_ptr<TpcCommitCommand> tpcCmd=std::dynamic_pointer_cast<TpcCommitCommand>(cmd);
-    reqs.push_back(std::make_pair(curSlot, (int)(tpcCmd->tx_id_)));
-    Log_info("Start method called with value %lu on loc id %d", tpcCmd->tx_id_, loc_id_);
+    reqs.push_back(std::make_tuple(curSlot, (int)(tpcCmd->tx_id_), loc_id_));
+    Log_debug("Start method called with value %lu on loc id %d", tpcCmd->tx_id_, loc_id_);
     *index = curSlot;
     curSlot++;
-    Log_info("Current slot is %d", curSlot);
+    Log_debug("Current slot is %d", curSlot);
     role = PROPOSER;
     callbacks[(int)(tpcCmd->tx_id_)] = cb;
 }
@@ -102,30 +106,31 @@ void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index, const 
 void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index) {
     std::lock_guard<std::recursive_mutex> lock(mtx_);
     shared_ptr<TpcCommitCommand> tpcCmd=std::dynamic_pointer_cast<TpcCommitCommand>(cmd);
-    reqs.push_back(std::make_pair(curSlot, (int)(tpcCmd->tx_id_)));
-    Log_info("Start method called with value %lu on loc id %d", tpcCmd->tx_id_, loc_id_);
+    reqs.push_back(std::make_tuple(curSlot, (int)(tpcCmd->tx_id_), loc_id_));
+    Log_debug("Start method called with value %lu on loc id %d", tpcCmd->tx_id_, loc_id_);
     *index = curSlot;
     curSlot++;
-    Log_info("Current slot is %d", curSlot);
+    Log_debug("Current slot is %d", curSlot);
     role = PROPOSER;
 }
 #endif
 
 // Propose method
-void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
-  Log_info("Propose method called with value %lu", value);
+void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value, const uint64_t &proposerId) {
+  Log_debug("Propose method called with value %lu at slot %lu", value, slot);
+  role = PROPOSER;
   uint64_t s = 4 * 1 + 0;
   uint64_t H = 100;
   Proposal proposal(H, proposerId, value);
   while (true){
     Coroutine::Sleep(10000);
     // If slot already taken by another proposer return
-    if (checkAlreadyCommitted(slot, value)){
+    if (checkAlreadyCommitted(slot, proposal.value, proposal.proposerId)){
       return;
     }
     // Artificial delay to make leader performance is better
     if (loc_id_ != cur_leader){
-      Log_info("Not leader");
+      Log_debug("Not leader");
       Coroutine::Sleep(50000);
     }
  
@@ -134,13 +139,13 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
     event->Wait(rpc_timeout);
     // Process replies (step, Fc, Ap)
     // Check if all replies have the same step
-    Log_info("Replies size is %d", event->replies.size());
+    Log_debug("Replies size is %d", event->replies.size());
     if (event->replies.size() < 2){
       continue;
     }
     bool allRepliesHaveSameStep = true;
     for (int i = 0; i < event->replies.size(); i++){
-      if (event->replies[i].currentStep!=0 && i!=loc_id_ && event->replies[i].currentStep != s){
+      if (event->replies[i].currentStep!=0 && event->replies[i].currentStep != s){
         allRepliesHaveSameStep = false;
         break;
       }
@@ -148,10 +153,10 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
     if (allRepliesHaveSameStep == true){
       // Check if all replies have the same priority
       if (s%4 == 0){
-        Log_info("In Phase 0");
+        Log_debug("In Phase 0");
         bool allRepliesHaveSamePriority = true;
         for (int i = 0; i < event->replies.size(); i++){
-          if (event->replies[i].currentStep!=0 && i!=loc_id_ && event->replies[i].Fc.priority != proposal.priority){
+          if (event->replies[i].currentStep!=0 && event->replies[i].Fc.priority != proposal.priority){
             allRepliesHaveSamePriority = false;
             break;
           }
@@ -161,21 +166,21 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
         if (allRepliesHaveSamePriority == true){
             Proposal chosenProposal = proposal;
             uint64_t value = chosenProposal.value;
-            if (checkAlreadyCommitted(slot, value)){
+            if (checkAlreadyCommitted(slot, chosenProposal.value, chosenProposal.proposerId)){
               role = RECORDER;
               return;
             }
-            Log_info("Value chosen is %d at index %d", value, slot);
+            Log_debug("Value chosen is %d at index %d", value, slot);
             #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
             fast++;
             #endif
-            commitChosenValue(slot, value);
+            commitChosenValue(slot, chosenProposal.value, chosenProposal.proposerId);
             role = RECORDER;
             return;
         }
         // If all replies do not have the same priority, then choose the value with the highest priority
         else {
-            Log_info("All replies don't have same priority");
+            Log_debug("All replies don't have same priority");
             proposal = findBestOfFirstSeenProposals(event->replies);
         }
       }
@@ -185,19 +190,19 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
       // }
       // Phase 2, Gather E existent proposal from all recorders, spread C common proposal to all recorders
       if (s%4 == 2){
-        Log_info("In Phase 2");
+        Log_debug("In Phase 2");
         Proposal bestOfAggregateProposal = findBestOfAggregateProposals(event->replies);
         if (proposal == bestOfAggregateProposal){
             uint64_t value = proposal.value;
-            if (checkAlreadyCommitted(slot, value)){
+            if (checkAlreadyCommitted(slot, proposal.value, proposal.proposerId)){
               role = RECORDER;
               return;
             }
-            Log_info("Value chosen is %d at index %d", value, slot);
+            Log_debug("Value chosen is %d at index %d", value, slot);
             #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
             slow++;
             #endif
-            commitChosenValue(slot, value);
+            commitChosenValue(slot, proposal.value, proposal.proposerId);
             role = RECORDER;
             return; 
         }
@@ -205,13 +210,13 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
       }
       // Phase 3, Gather C common proposal from all recorders
       if (s%4 == 3){
-        Log_info("In Phase 3");
+        Log_debug("In Phase 3");
         proposal = findBestOfAggregateProposals(event->replies); 
       }
       s += 1;
     }
     else if (allRepliesHaveSameStep == false){
-      Log_info("All replies don't have same step");
+      Log_debug("All replies don't have same step");
       Proposal maxStepProposal = findMaxStepProposal(event->replies);
       proposal = maxStepProposal;
       s = findMaxStep(event->replies);
@@ -223,7 +228,7 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value) {
 // receiver/recorder handlers
 void QuePaxaServer::intervalSummaryRegister(const uint64_t &index, const uint64_t &step, const string &proposalData, string *slotStateData) {
     
-    Log_info("Interval summary register called with index %lu, step %lu, proposalData %s", index, step, proposalData.c_str());
+    Log_debug("Interval summary register called with index %lu, step %lu, proposalData %s", index, step, proposalData.c_str());
 
     if (committedValues.find(index) != committedValues.end()){
         return;
@@ -268,10 +273,20 @@ void QuePaxaServer::intervalSummaryRegister(const uint64_t &index, const uint64_
 void QuePaxaServer::handleCommit(shared_ptr<Marshallable> &cmd) {
   std::lock_guard<std::recursive_mutex> lock(mtx_);
   auto state = dynamic_pointer_cast<QuePaxaCommitMarshallable>(cmd);
-  Log_info("handleCommit method called with value %lu", state->value);
-
+  Log_debug("handleCommit method called with value %lu", state->value);
   committedValues[state->slot] = state->value;
   curSlot = max(curSlot, state->slot + 1);
+  #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
+  if (state->proposerId == loc_id_){
+    Log_debug("Propser Id: %lu Loc_id: %lu", state->proposerId, loc_id_);
+    Log_debug("Committing value %lu", state->value);
+    commit_times.push_back(start_times[state->value].elapsed());
+
+    callbacks[state->value]();      
+
+  }
+  #endif
+  Log_debug("end");
   #ifdef QUEPAXA_TEST_CORO
   app_next_(*cmd);
   #endif
@@ -287,16 +302,16 @@ Proposal QuePaxaServer::findBestOfFirstSeenProposals(const vector<SlotState>& re
     uint64_t highestPriority = 0;
 
     for (int i = 0; i < replies.size(); ++i) {
-        if (i != loc_id_ && replies[i].Fc.priority > highestPriority) {
+        if (replies[i].Fc.priority > highestPriority) {
             bestIndex = i;
             highestPriority = replies[i].Fc.priority;
         }
     }
 
     if (bestIndex != -1) {
-        return Proposal(replies[bestIndex].Fc.priority, proposerId, replies[bestIndex].Fc.value);
+        return Proposal(replies[bestIndex].Fc.priority, replies[bestIndex].Fc.proposerId, replies[bestIndex].Fc.value);
     } else {
-        return Proposal();
+        return Proposal(-1,-1,-1);
     }
 }
 
@@ -315,7 +330,7 @@ Proposal QuePaxaServer::findBestOfAggregateProposals(const vector<SlotState>& re
     if (bestIndex != -1) {
         return replies[bestIndex].Ap;
     } else {
-        return Proposal(0, 0, 0);
+        return Proposal(-1, -1, -1);
     }
 }
 
@@ -345,23 +360,31 @@ uint64_t QuePaxaServer::findMaxStep(const vector<SlotState>& replies) {
     return maxStep;
 }
 
-shared_ptr<Marshallable> QuePaxaServer::convertValueToCommand(uint64_t slot, uint64_t value) {
+shared_ptr<Marshallable> QuePaxaServer::convertValueToCommand(uint64_t slot, uint64_t value, uint64_t proposerId) {
   auto state = make_shared<QuePaxaCommitMarshallable>();
   state->slot = slot;
   state->value = value;
+  state->proposerId = proposerId;
   shared_ptr<Marshallable> st(state);
   return st;
 }
 
-void QuePaxaServer::commitChosenValue(uint64_t slot, uint64_t value){
+void QuePaxaServer::commitChosenValue(uint64_t slot, uint64_t value, uint64_t proposerId){
   committedValues[slot] = value;
-  auto cmdptr_m = convertValueToCommand(slot, value);
+  auto cmdptr_m = convertValueToCommand(slot, value, proposerId);
   #ifdef QUEPAXA_TEST_CORO
   app_next_(*cmdptr_m);
   #endif
   #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
-  commit_times.push_back(start_times[value].elapsed());
-  callbacks[value]();
+  if (proposerId == loc_id_){
+    Log_debug("Committing value %lu", value);
+    Log_debug("Propser Id: %lu Loc_id: %lu", proposerId, loc_id_);
+
+    if (start_times.find(value) != start_times.end()){
+    commit_times.push_back(start_times[value].elapsed());
+    callbacks[value]();      
+    }
+  }
   #endif
   for (int i = 0; i < 5; i++){
     if (i!=loc_id_){
@@ -371,12 +394,13 @@ void QuePaxaServer::commitChosenValue(uint64_t slot, uint64_t value){
   }
 }
 
-bool QuePaxaServer::checkAlreadyCommitted(uint64_t slot, uint64_t value){
+bool QuePaxaServer::checkAlreadyCommitted(uint64_t slot, uint64_t value, uint64_t proposerId){
   if (committedValues.find(slot) != committedValues.end()){
     role = RECORDER;
     // should we commit on next free slot or ignore?
     #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
-    reqs.push_back(std::make_pair(curSlot, value));
+    Log_debug("SLot %lu already committed with value %lu", slot, committedValues[slot]);
+    reqs.push_back(std::make_tuple(curSlot, value, proposerId));
     curSlot++;
     #endif
     

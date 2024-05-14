@@ -23,7 +23,7 @@ void QuePaxaServiceImpl::HandleStart(const MarshallDeputy& md_cmd,
                                      string* res,
                                      rrr::DeferredReply* defer) {
   /* Your code here */
-  Log_info("receive an rpc: %s", req.c_str());
+  Log_debug("receive an rpc: %s", req.c_str());
   *res = "world";
   defer->reply();
   }    

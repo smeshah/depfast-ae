@@ -14,15 +14,18 @@ class QuePaxaCommitMarshallable : public Marshallable {
   QuePaxaCommitMarshallable() : Marshallable(MarshallDeputy::CMD_QUEPAXA_COMMIT) {}  
   uint64_t slot;
   uint64_t value;
+  uint64_t proposerId;
   Marshal& ToMarshal(Marshal& m) const override {
     m << slot;
     m << value;
+    m << proposerId;
     return m;
   }
 
   Marshal& FromMarshal(Marshal& m) override {
     m >> slot;
     m >> value;
+    m >> proposerId;
     return m;
   }
 };
@@ -32,7 +35,7 @@ class QuePaxaServer : public TxLogServer {
   /* do not modify this class below here */
  unordered_map<uint64_t, SlotState> slotStates;
  unordered_map<uint64_t, uint64_t> committedValues;
- std::list<std::pair<int, int>> reqs;
+ std::list<std::tuple<int, int, int>> reqs;
  uint64_t curSlot = 0;
  map<uint64_t, Timer> start_times;
  vector<double> commit_times;
@@ -47,16 +50,16 @@ int commit_timeout = 10000000; // 10 seconds
 int rpc_timeout = 5000000; // 5 seconds
 #endif
  uint64_t generateRandomPriority();
- void propose(const uint64_t &slot, const uint64_t &value);
+ void propose(const uint64_t &slot, const uint64_t &value, const uint64_t &proposerId);
  void intervalSummaryRegister(const uint64_t& curSlot, const uint64_t &step, const string &proposalData,  string *slotStateData);
  Proposal findBestOfFirstSeenProposals(const vector<SlotState>& replies);
  Proposal findBestOfAggregateProposals(const vector<SlotState>& replies);
  Proposal findMaxStepProposal(const vector<SlotState>& replies);
  uint64_t findMaxStep(const vector<SlotState>& replies);
  void handleCommit(shared_ptr<Marshallable> &cmd);
- shared_ptr<Marshallable> convertValueToCommand(uint64_t slot, uint64_t value);
- void commitChosenValue(uint64_t slot, uint64_t value);
- bool checkAlreadyCommitted(uint64_t slot, uint64_t value);
+ shared_ptr<Marshallable> convertValueToCommand(uint64_t slot, uint64_t value, uint64_t proposerId);
+ void commitChosenValue(uint64_t slot, uint64_t value, uint64_t proposerId);
+ bool checkAlreadyCommitted(uint64_t slot, uint64_t value, uint64_t proposerId);
 
  private:
   uint64_t proposerId = loc_id_;

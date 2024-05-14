@@ -54,7 +54,8 @@ class QuePaxaClientWorker : public ClientWorker {
     vector<shared_ptr<Marshallable>> cmds(tot_req_num_);
     random_device rd;
     mt19937 gen(rd());
-    uniform_int_distribution<int> leader_distribution(3, 4);
+    uniform_real_distribution<double> prob_distribution(0.0, 1.0);
+
     for (int i = 0; i < cmd_leader.size(); i++) {
       // Construct an empty TpcCommitCommand containing cmd as its tx_id_
       auto cmdptr = std::make_shared<TpcCommitCommand>();
@@ -63,7 +64,12 @@ class QuePaxaClientWorker : public ClientWorker {
       cmdptr->tx_id_ = i;
       cmdptr->cmd_ = vpd_p;
       auto cmdptr_m = dynamic_pointer_cast<Marshallable>(cmdptr);
-      cmd_leader[i] = 3;
+      if (prob_distribution(gen) < 0.99) { // 90% chance to be leader 3
+        cmd_leader[i] = cur_leader;
+      } else { // 10% chance to be one of the other leaders
+          cmd_leader[i] = (cur_leader + 1) % 5;
+      }
+      // cmd_leader[i] = cur_leader;
       cmds[i] = cmdptr_m;
     }
 
@@ -165,16 +171,13 @@ class QuePaxaClientWorker : public ClientWorker {
     // Write everything to file
     ofstream out_file;
     out_file.open("./plots/quepaxa/latencies_" + to_string(n_concurrent_) + "_"  + to_string(tot_req_num_)  + ".csv"); 
-    for (auto t : exec_times) {
-      out_file << t << ",";
-    }
-    out_file << endl;
+
     for (auto t : commit_times) {
       out_file << t << ",";
     }
-    out_file << endl;
-    out_file << throughput << endl;
-    out_file << fastpath_percentage << endl;
+    // out_file << endl;
+    // out_file << throughput << endl;
+    // out_file << fastpath_percentage << endl;
     out_file.close();
 
     Log_info("PERF TEST COMPLETED");
