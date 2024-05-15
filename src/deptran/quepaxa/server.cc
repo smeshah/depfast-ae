@@ -125,7 +125,7 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value, const u
   while (true){
     Coroutine::Sleep(10000);
     // If slot already taken by another proposer return
-    if (checkAlreadyCommitted(slot, proposal.value, proposal.proposerId)){
+    if (checkAlreadyCommitted(slot, proposal)){
       return;
     }
     // Artificial delay to make leader performance is better
@@ -166,7 +166,7 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value, const u
         if (allRepliesHaveSamePriority == true){
             Proposal chosenProposal = proposal;
             uint64_t value = chosenProposal.value;
-            if (checkAlreadyCommitted(slot, chosenProposal.value, chosenProposal.proposerId)){
+            if (checkAlreadyCommitted(slot, chosenProposal)){
               role = RECORDER;
               return;
             }
@@ -174,7 +174,7 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value, const u
             #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
             fast++;
             #endif
-            commitChosenValue(slot, chosenProposal.value, chosenProposal.proposerId);
+            commitChosenValue(slot, chosenProposal);
             role = RECORDER;
             return;
         }
@@ -194,7 +194,7 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value, const u
         Proposal bestOfAggregateProposal = findBestOfAggregateProposals(event->replies);
         if (proposal == bestOfAggregateProposal){
             uint64_t value = proposal.value;
-            if (checkAlreadyCommitted(slot, proposal.value, proposal.proposerId)){
+            if (checkAlreadyCommitted(slot, proposal)){
               role = RECORDER;
               return;
             }
@@ -202,7 +202,7 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value, const u
             #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
             slow++;
             #endif
-            commitChosenValue(slot, proposal.value, proposal.proposerId);
+            commitChosenValue(slot, proposal);
             role = RECORDER;
             return; 
         }
@@ -210,7 +210,7 @@ void QuePaxaServer::propose(const uint64_t &slot, const uint64_t &value, const u
       }
       // Phase 3, Gather C common proposal from all recorders
       if (s%4 == 3){
-        Log_debug("In Phase 3");
+        Log_info("In Phase 3");
         proposal = findBestOfAggregateProposals(event->replies); 
       }
       s += 1;
@@ -256,7 +256,7 @@ void QuePaxaServer::intervalSummaryRegister(const uint64_t &index, const uint64_
             state.Ap = state.Ac;
         }
         else {
-            state.Ap = Proposal(0, 0, 0);
+            state.Ap = Proposal(-1, -1, -1);
         }
         state.currentStep = step;
         state.Fc = proposal;
@@ -311,6 +311,7 @@ Proposal QuePaxaServer::findBestOfFirstSeenProposals(const vector<SlotState>& re
     if (bestIndex != -1) {
         return Proposal(replies[bestIndex].Fc.priority, replies[bestIndex].Fc.proposerId, replies[bestIndex].Fc.value);
     } else {
+        Log_info("This should not happen");
         return Proposal(-1,-1,-1);
     }
 }
@@ -369,20 +370,20 @@ shared_ptr<Marshallable> QuePaxaServer::convertValueToCommand(uint64_t slot, uin
   return st;
 }
 
-void QuePaxaServer::commitChosenValue(uint64_t slot, uint64_t value, uint64_t proposerId){
-  committedValues[slot] = value;
-  auto cmdptr_m = convertValueToCommand(slot, value, proposerId);
+void QuePaxaServer::commitChosenValue(uint64_t slot, Proposal proposal){
+  committedValues[slot] = proposal.value;
+  auto cmdptr_m = convertValueToCommand(slot, proposal.value, proposal.proposerId);
   #ifdef QUEPAXA_TEST_CORO
   app_next_(*cmdptr_m);
   #endif
   #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
-  if (proposerId == loc_id_){
-    Log_debug("Committing value %lu", value);
-    Log_debug("Propser Id: %lu Loc_id: %lu", proposerId, loc_id_);
+  if (proposal.proposerId == loc_id_){
+    Log_debug("Committing value %lu", proposal.value);
+    Log_debug("Propser Id: %lu Loc_id: %lu", proposal.proposerId, loc_id_);
 
-    if (start_times.find(value) != start_times.end()){
-    commit_times.push_back(start_times[value].elapsed());
-    callbacks[value]();      
+    if (start_times.find(proposal.value) != start_times.end()){
+    commit_times.push_back(start_times[proposal.value].elapsed());
+    callbacks[proposal.value]();      
     }
   }
   #endif
@@ -394,13 +395,13 @@ void QuePaxaServer::commitChosenValue(uint64_t slot, uint64_t value, uint64_t pr
   }
 }
 
-bool QuePaxaServer::checkAlreadyCommitted(uint64_t slot, uint64_t value, uint64_t proposerId){
+bool QuePaxaServer::checkAlreadyCommitted(uint64_t slot, Proposal proposal){
   if (committedValues.find(slot) != committedValues.end()){
     role = RECORDER;
     // should we commit on next free slot or ignore?
     #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
     Log_debug("SLot %lu already committed with value %lu", slot, committedValues[slot]);
-    reqs.push_back(std::make_tuple(curSlot, value, proposerId));
+    reqs.push_back(std::make_tuple(curSlot, proposal.value, proposal.proposerId));
     curSlot++;
     #endif
     

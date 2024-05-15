@@ -62,6 +62,7 @@ class Config {
   single_server_t single_server_;
   uint16_t n_concurrent_;
   int32_t max_retry_;
+  uint16_t split_req_;
   string dist_ = "uniform";
   float coeffcient_ = 0; // "uniform"
   int32_t rotate_{3};
@@ -157,6 +158,7 @@ class Config {
          char *ctrl_init,
          int32_t tot_req_num,
          int16_t n_concurrent,
+         int16_t split_req,
          uint32_t duration,
          bool heart_beat,
          single_server_t single_server,
@@ -240,6 +242,7 @@ class Config {
   int32_t get_max_retry();
   single_server_t get_single_server();
   uint32_t get_concurrent_txn();
+  uint32_t get_split_req();
   bool get_batch_start();
   bool do_early_return();
   bool do_logging();

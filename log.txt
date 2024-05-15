@@ -1,0 +1,113 @@
+I [../src/deptran/s_main.cc:147] 2024-05-15 10:16:00.095 | PWD : 
+I [../src/deptran/s_main.cc:295] 2024-05-15 10:16:00.096 | starting process 14920
+I [../src/deptran/s_main.cc:290] 2024-05-15 10:16:00.096 | ulimit -n is 1048576
+I [../src/deptran/config.cc:284] 2024-05-15 10:16:00.096 | no benchmark or table schema given
+I [../src/deptran/config.cc:301] 2024-05-15 10:16:00.096 | LoadYML: config/quepaxa_test.yml
+I [../src/deptran/config.cc:422] 2024-05-15 10:16:00.096 | BuildSiteProcMap
+I [../src/deptran/s_main.cc:301] 2024-05-15 10:16:00.096 | Read config finish
+I [../src/deptran/s_main.cc:31] 2024-05-15 10:16:00.096 | client_setup_heartbeat
+I [../src/deptran/s_main.cc:86] 2024-05-15 10:16:00.096 | server enabled, number of sites: 5
+I [../src/deptran/s_main.cc:92] 2024-05-15 10:16:00.096 | launching site: 1, bind address 0.0.0.0:8102
+I [../src/deptran/s_main.cc:92] 2024-05-15 10:16:00.096 | launching site: 0, bind address 0.0.0.0:8101
+I [../src/deptran/s_main.cc:92] 2024-05-15 10:16:00.096 | launching site: 4, bind address 0.0.0.0:8105
+I [../src/deptran/s_main.cc:92] 2024-05-15 10:16:00.096 | launching site: 2, bind address 0.0.0.0:8103
+I [../src/deptran/s_main.cc:92] 2024-05-15 10:16:00.096 | launching site: 3, bind address 0.0.0.0:8104
+I [../src/deptran/server_worker.cc:55] 2024-05-15 10:16:00.096 | Is it replicated: 1
+I [../src/deptran/s_main.cc:102] 2024-05-15 10:16:00.096 | table popped for site 1
+I [../src/deptran/server_worker.cc:128] 2024-05-15 10:16:00.096 | enter SetupService for s102 @ 0.0.0.0:8102
+I [../src/deptran/server_worker.cc:55] 2024-05-15 10:16:00.096 | Is it replicated: 1
+I [../src/deptran/s_main.cc:102] 2024-05-15 10:16:00.096 | table popped for site 4
+I [../src/deptran/server_worker.cc:128] 2024-05-15 10:16:00.096 | enter SetupService for s105 @ 0.0.0.0:8105
+I [../src/deptran/server_worker.cc:55] 2024-05-15 10:16:00.097 | Is it replicated: 1
+I [../src/deptran/server_worker.cc:55] 2024-05-15 10:16:00.097 | Is it replicated: 1
+I [../src/rrr/rpc/server.cpp:575] 2024-05-15 10:16:00.097 | bind address is: 0.0.0.0:8105
+I [../src/rrr/rpc/server.cpp:570] 2024-05-15 10:16:00.097 | rrr::Server: started on 0.0.0.0:8105
+I [../src/deptran/server_worker.cc:182] 2024-05-15 10:16:00.097 | Server s105 ready at 0.0.0.0:8105
+I [../src/deptran/s_main.cc:108] 2024-05-15 10:16:00.097 | start communication for site 4
+I [../src/rrr/reactor/reactor.cc:400] 2024-05-15 10:16:00.097 | starting poll thread
+I [../src/deptran/communicator.cc:25] 2024-05-15 10:16:00.097 | size of partitions: 1
+I [../src/rrr/rpc/server.cpp:575] 2024-05-15 10:16:00.097 | bind address is: 0.0.0.0:8102
+I [../src/deptran/s_main.cc:102] 2024-05-15 10:16:00.097 | table popped for site 2I [../src/rrr/rpc/server.cpp:570] 2024-05-15 10:16:00.097 | rrr::Server: started on 0.0.0.0:8102
+
+I [../src/deptran/server_worker.cc:182] 2024-05-15 10:16:00.097 | Server s102 ready at 0.0.0.0:8102
+I [../src/deptran/s_main.cc:108] 2024-05-15 10:16:00.097 | start communication for site 1
+I [../src/deptran/communicator.cc:25] 2024-05-15 10:16:00.097 | size of partitions: 1I [../src/deptran/server_worker.cc:128] 2024-05-15 10:16:00.097 | enter SetupService for s103 @ 0.0.0.0:8103
+
+I [../src/deptran/s_main.cc:102] 2024-05-15 10:16:00.097 | table popped for site 0
+I [../src/rrr/rpc/server.cpp:575] 2024-05-15 10:16:00.097 | bind address is: 0.0.0.0:8103
+I [../src/rrr/rpc/server.cpp:570] 2024-05-15 10:16:00.097 | rrr::Server: started on 0.0.0.0:8103
+I [../src/deptran/server_worker.cc:182] 2024-05-15 10:16:00.097 | Server s103 ready at 0.0.0.0:8103
+I [../src/deptran/s_main.cc:108] 2024-05-15 10:16:00.097 | start communication for site 2
+I [../src/deptran/server_worker.cc:128] 2024-05-15 10:16:00.097 | enter SetupService for s101 @ 0.0.0.0:8101
+I [../src/deptran/server_worker.cc:55] 2024-05-15 10:16:00.097 | Is it replicated: 1
+I [../src/rrr/rpc/server.cpp:575] 2024-05-15 10:16:00.098 | bind address is: 0.0.0.0:8101
+I [../src/rrr/rpc/server.cpp:570] 2024-05-15 10:16:00.098 | rrr::Server: started on 0.0.0.0:8101
+I [../src/deptran/server_worker.cc:182] 2024-05-15 10:16:00.098 | Server s101 ready at 0.0.0.0:8101
+I [../src/deptran/s_main.cc:108] 2024-05-15 10:16:00.098 | start communication for site 0
+I [../src/deptran/communicator.cc:25] 2024-05-15 10:16:00.098 | size of partitions: 1
+I [../src/rrr/reactor/reactor.cc:400] 2024-05-15 10:16:00.098 | starting poll thread
+I [../src/deptran/s_main.cc:102] 2024-05-15 10:16:00.098 | table popped for site 3
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.099 | connect to site: 127.0.0.1:8101 success!
+I [../src/deptran/server_worker.cc:128] 2024-05-15 10:16:00.099 | enter SetupService for s104 @ 0.0.0.0:8104
+I [../src/deptran/communicator.cc:25] 2024-05-15 10:16:00.098 | size of partitions: 1
+I [../src/rrr/reactor/reactor.cc:400] 2024-05-15 10:16:00.099 | starting poll thread
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.099 | connect to site: 127.0.0.1:8102 success!
+I [../src/rrr/reactor/reactor.cc:400] 2024-05-15 10:16:00.099 | starting poll thread
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.099 | connect to site: 127.0.0.1:8101 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.099 | connect to site: 127.0.0.1:8103 success!
+I [../src/rrr/rpc/server.cpp:575] 2024-05-15 10:16:00.099 | bind address is: 0.0.0.0:8104
+I [../src/rrr/rpc/server.cpp:570] 2024-05-15 10:16:00.099 | rrr::Server: started on 0.0.0.0:8104
+I [../src/deptran/server_worker.cc:182] 2024-05-15 10:16:00.099 | Server s104 ready at 0.0.0.0:8104
+I [../src/deptran/s_main.cc:108] 2024-05-15 10:16:00.099 | start communication for site 3
+I [../src/deptran/communicator.cc:25] 2024-05-15 10:16:00.099 | size of partitions: 1
+I [../src/rrr/reactor/reactor.cc:400] 2024-05-15 10:16:00.099 | starting poll thread
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.099 | connect to site: 127.0.0.1:8101 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.099 | connect to site: 127.0.0.1:8102 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.099 | connect to site: 127.0.0.1:8102 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.099 | connect to site: 127.0.0.1:8104 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.099 | connect to site: 127.0.0.1:8103 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.099 | connect to site: 127.0.0.1:8103 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.099 | connect to site: 127.0.0.1:8104 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.100 | connect to site: 127.0.0.1:8105 success!
+I [../src/deptran/s_main.cc:110] 2024-05-15 10:16:00.100 | site 3 launched!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.100 | connect to site: 127.0.0.1:8105 success!
+I [../src/deptran/s_main.cc:110] 2024-05-15 10:16:00.100 | site 0 launched!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.100 | connect to site: 127.0.0.1:8104 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:00.100 | connect to site: 127.0.0.1:8105 success!
+I [../src/deptran/s_main.cc:110] 2024-05-15 10:16:00.100 | site 2 launched!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:01.098 | connect to site: 127.0.0.1:8101 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:01.098 | connect to site: 127.0.0.1:8101 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:01.098 | connect to site: 127.0.0.1:8102 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:01.098 | connect to site: 127.0.0.1:8102 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:01.098 | connect to site: 127.0.0.1:8103 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:01.098 | connect to site: 127.0.0.1:8103 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:01.098 | connect to site: 127.0.0.1:8104 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:01.098 | connect to site: 127.0.0.1:8104 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:01.098 | connect to site: 127.0.0.1:8105 success!
+I [../src/deptran/s_main.cc:110] 2024-05-15 10:16:01.098 | site 1 launched!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:01.098 | connect to site: 127.0.0.1:8105 success!
+I [../src/deptran/s_main.cc:110] 2024-05-15 10:16:01.098 | site 4 launched!
+I [../src/deptran/s_main.cc:121] 2024-05-15 10:16:02.096 | waiting for server setup threads.
+I [../src/deptran/s_main.cc:125] 2024-05-15 10:16:02.096 | done waiting for server setup threads.
+I [../src/deptran/s_main.cc:132] 2024-05-15 10:16:02.096 | server workers' communicators setup
+I [../src/deptran/s_main.cc:55] 2024-05-15 10:16:02.096 | client enabled, number of sites: 1
+I [../src/rrr/reactor/reactor.cc:400] 2024-05-15 10:16:02.097 | starting poll thread
+I [../src/deptran/communicator.cc:25] 2024-05-15 10:16:02.097 | size of partitions: 1
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:02.097 | connect to site: 127.0.0.1:8101 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:02.097 | connect to site: 127.0.0.1:8102 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:02.097 | connect to site: 127.0.0.1:8103 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:02.097 | connect to site: 127.0.0.1:8104 success!
+I [../src/deptran/communicator.cc:191] 2024-05-15 10:16:02.097 | connect to site: 127.0.0.1:8105 success!
+I [../src/deptran/quepaxa/client_worker.h:117] 2024-05-15 10:16:02.100 | wait for finish... n_ceased_cleints: 0, n_issued: 0, n_done: 0
+I [../src/deptran/quepaxa/client_worker.h:111] 2024-05-15 10:16:02.103 | wait for all virtual clients to stop issuing new requests.
+I [../src/rrr/reactor/reactor.cc:96] 2024-05-15 10:16:02.126 | created 1024, busy 1023, idle 0 coroutines on server 0, recent :0
+I [../src/rrr/reactor/reactor.cc:96] 2024-05-15 10:16:02.188 | created 2048, busy 2047, idle 0 coroutines on server 0, recent :0
+I [../src/deptran/quepaxa/client_worker.h:117] 2024-05-15 10:16:03.100 | wait for finish... n_ceased_cleints: 100, n_issued: 20000, n_done: 0
+I [../src/deptran/quepaxa/client_worker.h:117] 2024-05-15 10:16:04.101 | wait for finish... n_ceased_cleints: 100, n_issued: 20000, n_done: 0
+I [../src/deptran/quepaxa/client_worker.h:117] 2024-05-15 10:16:05.101 | wait for finish... n_ceased_cleints: 100, n_issued: 20000, n_done: 0
+I [../src/deptran/quepaxa/client_worker.h:117] 2024-05-15 10:16:06.101 | wait for finish... n_ceased_cleints: 100, n_issued: 20000, n_done: 0
+I [../src/deptran/quepaxa/client_worker.h:117] 2024-05-15 10:16:07.102 | wait for finish... n_ceased_cleints: 100, n_issued: 20000, n_done: 0
+I [../src/deptran/quepaxa/client_worker.h:185] 2024-05-15 10:16:09.107 | PERF TEST COMPLETED
+I [../src/deptran/s_main.cc:151] 2024-05-15 10:16:12.097 | wait_for_clients: wait for client threads to exit.
+I [../src/deptran/s_main.cc:334] 2024-05-15 10:16:12.098 | all clients have shut down.
+I [../src/deptran/s_main.cc:382] 2024-05-15 10:16:12.355 | all server workers have shut down.

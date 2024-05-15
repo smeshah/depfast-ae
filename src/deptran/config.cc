@@ -67,11 +67,11 @@ int Config::CreateConfig(int argc, char **argv) {
   int server_or_client          = -1;
   int32_t tot_req_num           = 10000;
   int16_t n_concurrent          = 1;
-
+  int32_t split_req             = 0;
   int c;
   optind = 1;
   string filename;
-  while ((c = getopt(argc, argv, "bc:d:f:h:i:k:p:P:r:s:S:t:H:T:n:")) != -1) {
+  while ((c = getopt(argc, argv, "bc:d:f:h:i:k:p:P:r:s:S:t:H:T:n:o:")) != -1) {
     switch (c) {
       case 'b': // heartbeat to controller
         heart_beat = true;
@@ -169,6 +169,11 @@ int Config::CreateConfig(int argc, char **argv) {
         if ((end_ptr == NULL) || (*end_ptr != '\0'))
           return -4;
         break;
+      case 'o':
+        split_req = strtoul(optarg, &end_ptr, 10);
+        if ((end_ptr == NULL) || (*end_ptr != '\0'))
+          return -4;
+        break;
       case '?':
         // TODO remove
         if ((optopt == 'c') ||
@@ -201,6 +206,7 @@ int Config::CreateConfig(int argc, char **argv) {
     tot_req_num,
     n_concurrent,
     // ctrl_run,
+    split_req,
     duration,
     heart_beat,
     single_server,
@@ -227,6 +233,7 @@ Config::Config(char           *ctrl_hostname,
                char           *ctrl_init,
                int32_t         tot_req_num,
                int16_t         n_concurrent,
+               int16_t         split_req,
                uint32_t        duration,
                bool            heart_beat,
                single_server_t single_server,
@@ -254,6 +261,7 @@ Config::Config(char           *ctrl_hostname,
   logging_path_(logging_path),
   single_server_(single_server),
   n_concurrent_(n_concurrent),
+  split_req_(split_req),
   max_retry_(1),
   num_site_(0),
   start_coordinator_id_(0),
@@ -329,6 +337,9 @@ void Config::LoadYML(std::string &filename) {
   }
   if (config["n_parallel_dispatch"]) {
     n_parallel_dispatch_ = config["n_parallel_dispatch"].as<int32_t>();
+  }
+  if (config["split_req"]) {
+    split_req_ = config["split_req"].as<int16_t>();
   }
 }
 
@@ -989,6 +1000,10 @@ Config::single_server_t Config::get_single_server() {
 
 unsigned int Config::get_concurrent_txn() {
   return n_concurrent_;
+}
+
+unsigned int Config::get_split_req() {
+  return split_req_;
 }
 
 bool Config::get_batch_start() {

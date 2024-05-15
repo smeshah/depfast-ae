@@ -21,6 +21,7 @@ class QuePaxaClientWorker : public ClientWorker {
   atomic<int64_t> n_done_tx_;
   uint32_t n_concurrent_;
   uint32_t tot_req_num_;
+  uint32_t split_req_;
   uint32_t client_max_undone_{1500};
   bool_t metrics_collection_done_{0};
   #ifdef QUEPAXA_TEST_CORO
@@ -47,6 +48,7 @@ class QuePaxaClientWorker : public ClientWorker {
     Print("START PERFORMANCE TESTS");
     n_concurrent_ = Config::GetConfig()->get_concurrent_txn();
     tot_req_num_ = Config::GetConfig()->get_tot_req();
+    split_req_ = Config::GetConfig()->get_split_req();
     Print("Concurrent: %d, TotalRequests: %d", n_concurrent_, tot_req_num_);
 
     // Precompute command leader, command and dependency-key
@@ -64,9 +66,9 @@ class QuePaxaClientWorker : public ClientWorker {
       cmdptr->tx_id_ = i;
       cmdptr->cmd_ = vpd_p;
       auto cmdptr_m = dynamic_pointer_cast<Marshallable>(cmdptr);
-      if (prob_distribution(gen) < 0.99) { // 90% chance to be leader 3
+      if (prob_distribution(gen) > split_req_/100.0) { 
         cmd_leader[i] = cur_leader;
-      } else { // 10% chance to be one of the other leaders
+      } else { 
           cmd_leader[i] = (cur_leader + 1) % 5;
       }
       // cmd_leader[i] = cur_leader;

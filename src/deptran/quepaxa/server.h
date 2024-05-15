@@ -58,8 +58,8 @@ int rpc_timeout = 5000000; // 5 seconds
  uint64_t findMaxStep(const vector<SlotState>& replies);
  void handleCommit(shared_ptr<Marshallable> &cmd);
  shared_ptr<Marshallable> convertValueToCommand(uint64_t slot, uint64_t value, uint64_t proposerId);
- void commitChosenValue(uint64_t slot, uint64_t value, uint64_t proposerId);
- bool checkAlreadyCommitted(uint64_t slot, uint64_t value, uint64_t proposerId);
+ void commitChosenValue(uint64_t slot, Proposal proposal);
+ bool checkAlreadyCommitted(uint64_t slot, Proposal proposal);
 
  private:
   uint64_t proposerId = loc_id_;
