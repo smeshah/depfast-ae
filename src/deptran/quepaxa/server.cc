@@ -86,13 +86,10 @@ void QuePaxaServer::GetState(uint64_t slot, uint64_t *value) {
 void QuePaxaServer::Start(shared_ptr<Marshallable> &cmd, uint64_t *index, const function<void()> &cb) {
   /* Your code here. This function can be called from another OS thread. */
   // pending_values.push(value);
-    #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
-    auto& command = dynamic_cast<TpcCommitCommand&>(*cmd);
-    start_times[command.tx_id_].start();
-    Log_debug("Start method called with value %lu at %lu", command.tx_id_, loc_id_);
-
-    #endif
     shared_ptr<TpcCommitCommand> tpcCmd=std::dynamic_pointer_cast<TpcCommitCommand>(cmd);
+    #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
+    start_times[(int)(tpcCmd->tx_id_)].start();
+    #endif
     reqs.push_back(std::make_tuple(curSlot, (int)(tpcCmd->tx_id_), loc_id_));
     Log_debug("Start method called with value %lu on loc id %d", tpcCmd->tx_id_, loc_id_);
     *index = curSlot;
@@ -278,15 +275,10 @@ void QuePaxaServer::handleCommit(shared_ptr<Marshallable> &cmd) {
   curSlot = max(curSlot, state->slot + 1);
   #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
   if (state->proposerId == loc_id_){
-    Log_debug("Propser Id: %lu Loc_id: %lu", state->proposerId, loc_id_);
-    Log_debug("Committing value %lu", state->value);
     commit_times.push_back(start_times[state->value].elapsed());
-
     callbacks[state->value]();      
-
   }
   #endif
-  Log_debug("end");
   #ifdef QUEPAXA_TEST_CORO
   app_next_(*cmd);
   #endif
@@ -378,13 +370,8 @@ void QuePaxaServer::commitChosenValue(uint64_t slot, Proposal proposal){
   #endif
   #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
   if (proposal.proposerId == loc_id_){
-    Log_debug("Committing value %lu", proposal.value);
-    Log_debug("Propser Id: %lu Loc_id: %lu", proposal.proposerId, loc_id_);
-
-    if (start_times.find(proposal.value) != start_times.end()){
     commit_times.push_back(start_times[proposal.value].elapsed());
     callbacks[proposal.value]();      
-    }
   }
   #endif
   for (int i = 0; i < 5; i++){
@@ -400,11 +387,10 @@ bool QuePaxaServer::checkAlreadyCommitted(uint64_t slot, Proposal proposal){
     role = RECORDER;
     // should we commit on next free slot or ignore?
     #ifdef QUEPAXA_SERVER_METRICS_COLLECTION
-    Log_debug("SLot %lu already committed with value %lu", slot, committedValues[slot]);
+    Log_debug("Slot %lu already committed with value %lu", slot, committedValues[slot]);
     reqs.push_back(std::make_tuple(curSlot, proposal.value, proposal.proposerId));
     curSlot++;
     #endif
-    
     return true;
   }
   return false;

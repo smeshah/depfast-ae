@@ -49,7 +49,7 @@ class QuePaxaClientWorker : public ClientWorker {
     n_concurrent_ = Config::GetConfig()->get_concurrent_txn();
     tot_req_num_ = Config::GetConfig()->get_tot_req();
     split_req_ = Config::GetConfig()->get_split_req();
-    Print("Concurrent: %d, TotalRequests: %d", n_concurrent_, tot_req_num_);
+    Print("Concurrent: %d, TotalRequests: %d, SplitRequests: %d", n_concurrent_, tot_req_num_, split_req_);
 
     // Precompute command leader, command and dependency-key
     vector<int> cmd_leader(tot_req_num_);
